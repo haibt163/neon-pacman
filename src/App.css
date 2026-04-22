@@ -1,0 +1,148 @@
+:root {
+  --neon-blue: #0ff;
+  --neon-pink: #f0f;
+  --bg-color: #050505;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-color);
+  /* Synthwave Grid Background */
+  background-image: 
+    linear-gradient(rgba(5, 5, 5, 0.9), rgba(5, 5, 5, 0.9)),
+    repeating-linear-gradient(transparent, transparent 50px, rgba(0, 255, 255, 0.15) 50px, rgba(0, 255, 255, 0.15) 52px),
+    repeating-linear-gradient(90deg, transparent, transparent 50px, rgba(255, 0, 255, 0.15) 50px, rgba(255, 0, 255, 0.15) 52px);
+  background-attachment: fixed;
+  color: #fff;
+  font-family: 'Press Start 2P', cursive;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+.game-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  z-index: 10;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 600px;
+  text-shadow: 0 0 10px var(--neon-blue);
+  font-size: 14px;
+}
+
+.stat-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.stat-value {
+  color: var(--neon-pink);
+  text-shadow: 0 0 10px var(--neon-pink);
+}
+
+.canvas-wrapper {
+  position: relative;
+  /* An ambient background glow that doesn't create hard physical borders */
+  box-shadow: 0 0 40px rgba(0, 255, 255, 0.2), 0 0 40px rgba(255, 0, 255, 0.2);
+  border-radius: 4px;
+}
+
+canvas {
+  background-color: rgba(0, 0, 0, 0.6);
+  display: block;
+  /* Top and Bottom borders only! This leaves the side tunnels open */
+  border-top: 3px solid var(--neon-blue);
+  border-bottom: 3px solid var(--neon-pink);
+  border-radius: 4px;
+}
+
+.overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  z-index: 20;
+}
+
+.overlay h1 {
+  color: var(--neon-pink);
+  text-shadow: 0 0 15px var(--neon-pink);
+  font-size: 32px;
+  margin-bottom: 20px;
+}
+
+.landing-art {
+  display: flex;
+  gap: 15px;
+  margin-bottom: 30px;
+  align-items: center;
+}
+
+.css-pacman {
+  width: 0; height: 0;
+  border: 20px solid #ffff00;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: chomp 0.5s infinite;
+  filter: drop-shadow(0 0 10px #ffff00);
+}
+
+.css-ghost {
+  width: 30px; height: 35px;
+  border-top-left-radius: 15px;
+  border-top-right-radius: 15px;
+  position: relative;
+}
+.css-ghost::after {
+  content: '';
+  position: absolute;
+  bottom: -4px; left: 0;
+  border-left: 10px solid transparent; border-right: 10px solid transparent; border-top: 10px solid inherit;
+}
+
+.blinky { background-color: #ff0000; filter: drop-shadow(0 0 10px #ff0000); }
+.pinky { background-color: #ffb8ff; filter: drop-shadow(0 0 10px #ffb8ff); }
+.inky { background-color: #00ffff; filter: drop-shadow(0 0 10px #00ffff); }
+.clyde { background-color: #ffb852; filter: drop-shadow(0 0 10px #ffb852); }
+
+@keyframes chomp {
+  0% { border-right-color: transparent; }
+  50% { border-right-color: #ffff00; }
+  100% { border-right-color: transparent; }
+}
+
+button {
+  background: transparent;
+  color: var(--neon-blue);
+  border: 2px solid var(--neon-blue);
+  padding: 15px 30px;
+  font-family: 'Press Start 2P', cursive;
+  font-size: 14px;
+  cursor: pointer;
+  box-shadow: 0 0 10px var(--neon-blue) inset, 0 0 10px var(--neon-blue);
+  text-shadow: 0 0 5px var(--neon-blue);
+  transition: all 0.2s;
+}
+
+button:hover {
+  background: var(--neon-blue);
+  color: #000;
+  box-shadow: 0 0 20px var(--neon-blue) inset, 0 0 20px var(--neon-blue);
+  text-shadow: none;
+}
