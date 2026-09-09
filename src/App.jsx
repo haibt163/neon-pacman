@@ -28,7 +28,8 @@ const LEVEL_1_MAZE = [
 ];
 
 const TILE_SIZE = 24;
-const GHOST_RENDER_HEIGHT = 23;
+// Larger than Pac-Man's diameter so the imported character art reads as the main actors.
+const GHOST_RENDER_HEIGHT = 38;
 const GHOST_PEN = { x: 9, y: 9 };
 const MAZE_WIDTH = LEVEL_1_MAZE[0].length;
 const MAZE_COLORS = ['#00ffff', '#00ff00', '#ff00ff', '#ffff00', '#ff0000'];
@@ -88,6 +89,7 @@ const playSound = (type) => {
 
 export default function App() {
   const canvasRef = useRef(null);
+  const touchStartRef = useRef(null);
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(() => parseInt(localStorage.getItem('pacman-highscore')) || 0);
   const [level, setLevel] = useState(1);
@@ -107,6 +109,13 @@ export default function App() {
   });
 
   const getDist = (x1, y1, x2, y2) => Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+
+  const setDirection = useCallback((dx, dy) => {
+    if (gameState !== 'PLAYING') return;
+    const p = gameData.current.pacman;
+    p.nextDx = dx;
+    p.nextDy = dy;
+  }, [gameState]);
 
   const resetPositions = useCallback(() => {
     gameData.current.pacman = { ...gameData.current.pacman, x: 9, y: 15, dx: 0, dy: 0, nextDx: 0, nextDy: 0 };
@@ -153,15 +162,56 @@ export default function App() {
       if (gameState !== 'PLAYING') return;
       if(["Space","ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].indexOf(e.code) > -1) e.preventDefault();
       
-      const p = gameData.current.pacman;
-      if (e.key === 'ArrowUp') { p.nextDx = 0; p.nextDy = -1; }
-      if (e.key === 'ArrowDown') { p.nextDx = 0; p.nextDy = 1; }
-      if (e.key === 'ArrowLeft') { p.nextDx = -1; p.nextDy = 0; }
-      if (e.key === 'ArrowRight') { p.nextDx = 1; p.nextDy = 0; }
+      if (e.key === 'ArrowUp') setDirection(0, -1);
+      if (e.key === 'ArrowDown') setDirection(0, 1);
+      if (e.key === 'ArrowLeft') setDirection(-1, 0);
+      if (e.key === 'ArrowRight') setDirection(1, 0);
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [gameState]);
+  }, [gameState, setDirection]);
+
+  // Mobile/tablet control: swipe anywhere on the game board. No on-screen D-pad/buttons.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || gameState !== 'PLAYING') return;
+
+    const SWIPE_THRESHOLD = 18;
+    const handlePointerDown = (e) => {
+      if (e.pointerType === 'mouse') return;
+      touchStartRef.current = { x: e.clientX, y: e.clientY };
+      canvas.setPointerCapture?.(e.pointerId);
+    };
+
+    const handlePointerUp = (e) => {
+      const start = touchStartRef.current;
+      touchStartRef.current = null;
+      if (!start || e.pointerType === 'mouse') return;
+
+      const dx = e.clientX - start.x;
+      const dy = e.clientY - start.y;
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < SWIPE_THRESHOLD) return;
+
+      if (Math.abs(dx) > Math.abs(dy)) {
+        setDirection(dx > 0 ? 1 : -1, 0);
+      } else {
+        setDirection(0, dy > 0 ? 1 : -1);
+      }
+    };
+
+    const handlePointerCancel = () => {
+      touchStartRef.current = null;
+    };
+
+    canvas.addEventListener('pointerdown', handlePointerDown, { passive: true });
+    canvas.addEventListener('pointerup', handlePointerUp, { passive: true });
+    canvas.addEventListener('pointercancel', handlePointerCancel, { passive: true });
+    return () => {
+      canvas.removeEventListener('pointerdown', handlePointerDown);
+      canvas.removeEventListener('pointerup', handlePointerUp);
+      canvas.removeEventListener('pointercancel', handlePointerCancel);
+    };
+  }, [gameState, setDirection]);
 
   useEffect(() => {
     if (gameState !== 'PLAYING' && gameState !== 'DIED') return;
@@ -384,16 +434,31 @@ export default function App() {
       const renderScale = GHOST_RENDER_HEIGHT / image.naturalHeight;
       const renderWidth = image.naturalWidth * renderScale;
       const renderHeight = image.naturalHeight * renderScale;
+      const ghostColor = g.color;
 
       ctx.save();
       ctx.imageSmoothingEnabled = false;
-      ctx.shadowColor = g.mode === 'frightened' ? '#0000ff' : g.color;
-      ctx.shadowBlur = 10;
+
+      // Give the darker character art a visible neon aura without changing gameplay sprites.
+      const glow = ctx.createRadialGradient(gx, gy, 3, gx, gy, Math.max(renderWidth, renderHeight) * 0.8);
+      glow.addColorStop(0, `${ghostColor}55`);
+      glow.addColorStop(0.45, `${ghostColor}22`);
+      glow.addColorStop(1, `${ghostColor}00`);
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(gx, gy, Math.max(renderWidth, renderHeight) * 0.8, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.shadowColor = g.mode === 'frightened' ? '#ffffff' : ghostColor;
+      ctx.shadowBlur = 14;
       if (g.mode === 'frightened') {
         const flashing = data.frightenedTimer < 150 && Math.floor(data.frightenedTimer / 15) % 2 === 0;
         ctx.filter = flashing
-          ? 'grayscale(1) brightness(1.8)'
-          : 'grayscale(1) sepia(1) hue-rotate(170deg) saturate(6) brightness(0.9)';
+          ? 'grayscale(1) brightness(1.9) contrast(1.15)'
+          : 'grayscale(1) sepia(1) hue-rotate(170deg) saturate(6) brightness(1.15) contrast(1.08)';
+      } else {
+        // Lift the darkest pixels enough to remain readable against the black maze.
+        ctx.filter = 'brightness(1.22) contrast(1.12)';
       }
       ctx.drawImage(image, gx - renderWidth / 2, gy - renderHeight / 2, renderWidth, renderHeight);
       ctx.restore();
