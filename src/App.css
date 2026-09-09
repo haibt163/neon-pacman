@@ -103,23 +103,26 @@ canvas {
   filter: drop-shadow(0 0 10px #ffff00);
 }
 
+/* The title-screen enemies now use the same real transparent PNG sprites as gameplay. */
 .css-ghost {
-  width: 30px; height: 35px;
-  border-top-left-radius: 15px;
-  border-top-right-radius: 15px;
+  width: 30px;
+  height: 35px;
   position: relative;
-}
-.css-ghost::after {
-  content: '';
-  position: absolute;
-  bottom: -4px; left: 0;
-  border-left: 10px solid transparent; border-right: 10px solid transparent; border-top: 10px solid inherit;
+  background-color: transparent;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  image-rendering: pixelated;
 }
 
-.blinky { background-color: #ff0000; filter: drop-shadow(0 0 10px #ff0000); }
-.pinky { background-color: #ffb8ff; filter: drop-shadow(0 0 10px #ffb8ff); }
-.inky { background-color: #00ffff; filter: drop-shadow(0 0 10px #00ffff); }
-.clyde { background-color: #ffb852; filter: drop-shadow(0 0 10px #ffb852); }
+.css-ghost::after {
+  display: none;
+}
+
+.blinky { background-image: url('./assets/blinky.png'); filter: drop-shadow(0 0 10px #ff00ff); }
+.pinky { background-image: url('./assets/pinky.png'); filter: drop-shadow(0 0 10px #ff00ff); }
+.inky { background-image: url('./assets/inky.png'); filter: drop-shadow(0 0 10px #00ffff); }
+.clyde { background-image: url('./assets/clyde.png'); filter: drop-shadow(0 0 10px #aa00ff); }
 
 @keyframes chomp {
   0% { border-right-color: transparent; }
