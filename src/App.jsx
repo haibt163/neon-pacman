@@ -98,7 +98,7 @@ export default function App() {
 
   const gameData = useRef({
     maze: [],
-    pacman: { x: 9, y: 15, dx: 0, dy: 0, nextDx: 0, nextDy: 0, frame: 0, speed: 0.1 }, 
+    pacman: { x: 9, y: 15, dx: 0, dy: 0, nextDx: 0, nextDy: 0, frame: 0, speed: 0.16 }, 
     ghosts: [],
     pelletsCount: 0,
     frightenedTimer: 0,
@@ -289,7 +289,7 @@ export default function App() {
 
       if (data.fruitActive) {
         data.fruitTimer--;
-        if (getDist(p.x, p.y, 9, 11) < 1.2) { 
+        if (getDist(p.x, p.y, 9, 11) < 1.2) {
           setScore(s => s + (level * 100));
           playSound('power');
           data.fruitActive = false;
@@ -305,7 +305,7 @@ export default function App() {
       }
 
       data.ghosts.forEach(g => {
-        let activeSpeed = g.mode === 'frightened' ? 0.05 : (g.mode === 'eaten' ? 0.2 : 0.0625 + (level * 0.005));
+        let activeSpeed = g.mode === 'frightened' ? 0.085 : (g.mode === 'eaten' ? 0.22 : 0.105 + (level * 0.006));
         
         if (Math.round(g.y) === 9 && (g.x <= 3 || g.x >= 15)) activeSpeed *= 0.4;
 
@@ -340,35 +340,24 @@ export default function App() {
             {dx: 0, dy: -1}, {dx: 0, dy: 1}, {dx: -1, dy: 0}, {dx: 1, dy: 0}
           ].filter(m => {
             if (m.dx === -g.dx && m.dy === -g.dy && (g.dx !== 0 || g.dy !== 0)) return false;
-            
             const mcx = Math.round(g.x + m.dx);
             const mcy = Math.round(g.y + m.dy);
             if (mcy === 9 && (mcx < 0 || mcx >= MAZE_WIDTH)) return true;
-            
             const cell = data.maze[mcy]?.[mcx];
             if (cell === undefined || cell === 1) return false;
-            
             const inPen = Math.round(g.x) >= 8 && Math.round(g.x) <= 10 && Math.round(g.y) >= 8 && Math.round(g.y) <= 10;
-            if (cell === 4 && g.mode !== 'eaten' && !inPen) return false; 
-            
+            if (cell === 4 && g.mode !== 'eaten' && !inPen) return false;
             return true;
           });
 
           if (possibleMoves.length > 0) {
-            let bestMove = possibleMoves[0];
-            let minTargetDist = Infinity;
-
-            possibleMoves.forEach(m => {
-              const d = getDist(g.x + m.dx, g.y + m.dy, targetX, targetY);
-              if (d < minTargetDist) {
-                minTargetDist = d; bestMove = m;
-              }
+            possibleMoves.sort((a,b) => {
+              const distA = getDist(g.x + a.dx, g.y + a.dy, targetX, targetY);
+              const distB = getDist(g.x + b.dx, g.y + b.dy, targetX, targetY);
+              return distA - distB;
             });
-
-            if (g.mode === 'frightened') {
-              bestMove = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
-            }
-            g.dx = bestMove.dx; g.dy = bestMove.dy;
+            const best = possibleMoves[0];
+            g.dx = best.dx; g.dy = best.dy;
           } else {
             g.dx *= -1;
             g.dy *= -1;
@@ -382,13 +371,13 @@ export default function App() {
         if (g.x < -0.5) g.x = MAZE_WIDTH - 0.5;
         if (g.x > MAZE_WIDTH - 0.5) g.x = -0.5;
 
-        if (Math.abs(g.x - p.x) < 0.8 && Math.abs(g.y - p.y) < 0.8) {
+        if (getDist(g.x, g.y, p.x, p.y) < 0.65) {
           if (g.mode === 'frightened') {
-            playSound('eat_ghost');
             g.mode = 'eaten';
             setScore(s => s + data.ghostMultiplier);
             data.ghostMultiplier *= 2;
-          } else if (g.mode === 'normal') {
+            playSound('eat_ghost');
+          } else if (g.mode !== 'eaten') {
             playSound('die');
             setGameState('DIED');
             setTimeout(() => {
@@ -399,7 +388,7 @@ export default function App() {
               } else {
                 setGameState('GAMEOVER');
               }
-            }, 1500);
+            }, 1000);
           }
         }
       });
@@ -434,31 +423,16 @@ export default function App() {
       const renderScale = GHOST_RENDER_HEIGHT / image.naturalHeight;
       const renderWidth = image.naturalWidth * renderScale;
       const renderHeight = image.naturalHeight * renderScale;
-      const ghostColor = g.color;
 
       ctx.save();
       ctx.imageSmoothingEnabled = false;
-
-      // Give the darker character art a visible neon aura without changing gameplay sprites.
-      const glow = ctx.createRadialGradient(gx, gy, 3, gx, gy, Math.max(renderWidth, renderHeight) * 0.8);
-      glow.addColorStop(0, `${ghostColor}55`);
-      glow.addColorStop(0.45, `${ghostColor}22`);
-      glow.addColorStop(1, `${ghostColor}00`);
-      ctx.fillStyle = glow;
-      ctx.beginPath();
-      ctx.arc(gx, gy, Math.max(renderWidth, renderHeight) * 0.8, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.shadowColor = g.mode === 'frightened' ? '#ffffff' : ghostColor;
-      ctx.shadowBlur = 14;
+      ctx.shadowColor = g.mode === 'frightened' ? '#0000ff' : g.color;
+      ctx.shadowBlur = 10;
       if (g.mode === 'frightened') {
         const flashing = data.frightenedTimer < 150 && Math.floor(data.frightenedTimer / 15) % 2 === 0;
         ctx.filter = flashing
-          ? 'grayscale(1) brightness(1.9) contrast(1.15)'
-          : 'grayscale(1) sepia(1) hue-rotate(170deg) saturate(6) brightness(1.15) contrast(1.08)';
-      } else {
-        // Lift the darkest pixels enough to remain readable against the black maze.
-        ctx.filter = 'brightness(1.22) contrast(1.12)';
+          ? 'grayscale(1) brightness(1.8)'
+          : 'grayscale(1) sepia(1) hue-rotate(170deg) saturate(6) brightness(0.9)';
       }
       ctx.drawImage(image, gx - renderWidth / 2, gy - renderHeight / 2, renderWidth, renderHeight);
       ctx.restore();
@@ -471,12 +445,6 @@ export default function App() {
 
       data.maze.forEach((row, y) => {
         row.forEach((cell, x) => {
-          if (level >= 20 && x > 9) {
-            ctx.fillStyle = ['#ff00ff', '#00ffff', '#ffff00', '#ff0000'][Math.floor(Math.random()*4)];
-            if(Math.random() > 0.5) ctx.fillText(String.fromCharCode(Math.random() * 50 + 65), x * TILE_SIZE, y * TILE_SIZE + 15);
-            return; 
-          }
-
           if (cell === 1) {
             ctx.strokeStyle = wallColor; 
             ctx.lineWidth = 2;
@@ -501,100 +469,82 @@ export default function App() {
             ctx.fillStyle = '#ffb8ff'; 
             ctx.shadowColor = '#ffb8ff';
             ctx.shadowBlur = 8;
-            ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE + 10, TILE_SIZE, 4);
+            ctx.fillRect(x * TILE_SIZE + 2, y * TILE_SIZE + 10, TILE_SIZE - 4, 4);
             ctx.shadowBlur = 0;
           }
         });
       });
 
-      if (data.fruitActive && level < 20) {
-        ctx.font = '18px Arial';
-        ctx.shadowColor = '#ffffff';
-        ctx.shadowBlur = 10;
-        const fruitIcon = FRUITS[Math.min(level - 1, FRUITS.length - 1)];
-        ctx.fillText(fruitIcon, 9 * TILE_SIZE + 2, 11 * TILE_SIZE + 18);
-        ctx.shadowBlur = 0;
-      }
-
-      if (gameState !== 'DIED' || Math.floor(Date.now() / 200) % 2 === 0) {
-        const p = data.pacman;
-        ctx.fillStyle = '#ffff00';
-        ctx.shadowColor = '#ffff00';
-        ctx.shadowBlur = 15;
-        ctx.beginPath();
-        let angle = 0;
-        if (p.dx === 1) angle = 0;
-        else if (p.dx === -1) angle = Math.PI;
-        else if (p.dy === 1) angle = Math.PI / 2;
-        else if (p.dy === -1) angle = -Math.PI / 2;
-        
-        const mouthOpen = gameState === 'DIED' ? Math.PI/1.2 : Math.abs(Math.sin(p.frame)) * 0.5;
-        const px = p.x * TILE_SIZE + TILE_SIZE/2;
-        const py = p.y * TILE_SIZE + TILE_SIZE/2;
-        
-        ctx.arc(px, py, TILE_SIZE/2.2, angle + mouthOpen, angle + 2*Math.PI - mouthOpen);
-        ctx.lineTo(px, py);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-      }
-
       data.ghosts.forEach(g => drawGhostSprite(g));
+
+      const p = data.pacman;
+      const px = p.x * TILE_SIZE + TILE_SIZE / 2;
+      const py = p.y * TILE_SIZE + TILE_SIZE / 2;
+      const mouth = Math.abs(Math.sin(p.frame)) * 0.35;
+      const angle = p.dx === 1 ? 0 : p.dx === -1 ? Math.PI : p.dy === 1 ? Math.PI / 2 : p.dy === -1 ? -Math.PI / 2 : 0;
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate(angle);
+      ctx.fillStyle = '#ffff00';
+      ctx.shadowColor = '#ffff00';
+      ctx.shadowBlur = 15;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.arc(0, 0, TILE_SIZE / 2.2, mouth, Math.PI * 2 - mouth);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+      ctx.shadowBlur = 0;
+
+      if (data.fruitActive && level < 20) {
+        const fruitIcon = FRUITS[Math.min(level - 1, FRUITS.length - 1)];
+        ctx.font = '20px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(fruitIcon, 9 * TILE_SIZE + TILE_SIZE/2, 11 * TILE_SIZE + TILE_SIZE/2);
+      }
     };
 
     const loop = () => {
       update();
       draw();
-      if (gameState === 'PLAYING' || gameState === 'DIED') {
-        gameData.current.animationId = requestAnimationFrame(loop);
-      }
+      data.animationId = requestAnimationFrame(loop);
     };
-    
-    loop();
-    return () => cancelAnimationFrame(gameData.current.animationId);
+
+    const data = gameData.current;
+    if (gameState === 'PLAYING') {
+      if (!data.maze.length) initLevel(level, score, lives);
+      loop();
+    } else {
+      draw();
+    }
+
+    return () => cancelAnimationFrame(data.animationId);
   }, [gameState, level, lives, score, initLevel, resetPositions]);
 
-  return (
-    <div className="game-container">
-      {gameState !== 'START' && (
-        <iframe
-          width="0" height="0" frameBorder="0" allow="autoplay"
-          src="https://www.youtube.com/embed/qtZ0hl-unM4?autoplay=1&loop=1&playlist=qtZ0hl-unM4"
-          style={{ display: 'none' }} title="bg-music"
-        />
-      )}
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    canvas.width = MAZE_WIDTH * TILE_SIZE;
+    canvas.height = LEVEL_1_MAZE.length * TILE_SIZE;
+  }, []);
 
-      <div className="header">
+  return (
+    <div className="app-container">
+      <div className="game-header">
         <div className="stat-box"><span>SCORE</span><span className="stat-value">{score}</span></div>
         <div className="stat-box"><span>LEVEL</span><span className="stat-value">{level}</span></div>
-        <div className="stat-box"><span>LIVES</span><span className="stat-value">{'❤️'.repeat(lives)}</span></div>
+        <div className="stat-box"><span>LIVES</span><span className="stat-value">{lives}</span></div>
         <div className="stat-box"><span>HIGH SCORE</span><span className="stat-value">{highScore}</span></div>
       </div>
-
-      <div className="canvas-wrapper">
-        <canvas 
-          ref={canvasRef} 
-          width={MAZE_WIDTH * TILE_SIZE} 
-          height={LEVEL_1_MAZE.length * TILE_SIZE} 
-        />
-        
-        {gameState === 'START' && (
+      <div className="game-wrapper">
+        <canvas ref={canvasRef} className="game-canvas" />
+        {gameState !== 'PLAYING' && (
           <div className="overlay">
-            <div className="landing-art">
-              <div className="css-pacman"></div>
-              <div className="css-ghost blinky"></div>
-              <div className="css-ghost pinky"></div>
-              <div className="css-ghost inky"></div>
-              <div className="css-ghost clyde"></div>
-            </div>
-            <h1>NEON PACMAN</h1>
-            <button onClick={startGame}>INSERT COIN</button>
-          </div>
-        )}
-
-        {gameState === 'GAMEOVER' && (
-          <div className="overlay">
-            <h1>GAME OVER</h1>
-            <button onClick={startGame}>TRY AGAIN</button>
+            <div className="title">NEON PACMAN</div>
+            <button onClick={startGame} className="start-button">
+              {gameState === 'GAMEOVER' ? 'PLAY AGAIN' : 'INSERT COIN'}
+            </button>
           </div>
         )}
       </div>
