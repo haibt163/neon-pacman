@@ -1,5 +1,9 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import './App.css';
+import blinkySprite from './assets/blinky.png';
+import pinkySprite from './assets/pinky.png';
+import inkySprite from './assets/inky.png';
+import clydeSprite from './assets/clyde.png';
 
 const LEVEL_1_MAZE = [
   [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
@@ -24,11 +28,24 @@ const LEVEL_1_MAZE = [
 ];
 
 const TILE_SIZE = 24;
+const GHOST_RENDER_HEIGHT = 23;
 const GHOST_PEN = { x: 9, y: 9 };
 const MAZE_WIDTH = LEVEL_1_MAZE[0].length;
-// Vibrant Neon Wall Colors per level
 const MAZE_COLORS = ['#00ffff', '#00ff00', '#ff00ff', '#ffff00', '#ff0000'];
 const FRUITS = ['🍒', '🍓', '🍊', '🍎', '🍈'];
+const GHOST_SPRITES = {
+  blinky: blinkySprite,
+  pinky: pinkySprite,
+  inky: inkySprite,
+  clyde: clydeSprite
+};
+const GHOST_IMAGES = Object.fromEntries(
+  Object.entries(GHOST_SPRITES).map(([id, src]) => {
+    const image = new Image();
+    image.src = src;
+    return [id, image];
+  })
+);
 
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 const playSound = (type) => {
@@ -215,7 +232,6 @@ export default function App() {
           data.fruitTimer = 500;
         }
 
-        // Complete the level by eating all dots
         if (data.pelletsCount <= 0) {
           initLevel(level + 1, score, lives);
         }
@@ -341,10 +357,51 @@ export default function App() {
       p.frame += 0.2;
     };
 
+    const drawGhostSprite = (g) => {
+      const gx = g.x * TILE_SIZE + TILE_SIZE / 2;
+      const gy = g.y * TILE_SIZE + TILE_SIZE / 2;
+      const data = gameData.current;
+
+      if (g.mode === 'eaten') {
+        // Preserve the original eaten state: only the eyes remain visible while returning to the pen.
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(gx - TILE_SIZE/6, gy - TILE_SIZE/6, TILE_SIZE/6, 0, Math.PI * 2);
+        ctx.arc(gx + TILE_SIZE/6, gy - TILE_SIZE/6, TILE_SIZE/6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#0000ff';
+        ctx.beginPath();
+        const pDx = g.dx * 2; const pDy = g.dy * 2;
+        ctx.arc(gx - TILE_SIZE/6 + pDx, gy - TILE_SIZE/6 + pDy, TILE_SIZE/12, 0, Math.PI * 2);
+        ctx.arc(gx + TILE_SIZE/6 + pDx, gy - TILE_SIZE/6 + pDy, TILE_SIZE/12, 0, Math.PI * 2);
+        ctx.fill();
+        return;
+      }
+
+      const image = GHOST_IMAGES[g.id];
+      if (!image || !image.complete || !image.naturalWidth) return;
+
+      const renderScale = GHOST_RENDER_HEIGHT / image.naturalHeight;
+      const renderWidth = image.naturalWidth * renderScale;
+      const renderHeight = image.naturalHeight * renderScale;
+
+      ctx.save();
+      ctx.imageSmoothingEnabled = false;
+      ctx.shadowColor = g.mode === 'frightened' ? '#0000ff' : g.color;
+      ctx.shadowBlur = 10;
+      if (g.mode === 'frightened') {
+        const flashing = data.frightenedTimer < 150 && Math.floor(data.frightenedTimer / 15) % 2 === 0;
+        ctx.filter = flashing
+          ? 'grayscale(1) brightness(1.8)'
+          : 'grayscale(1) sepia(1) hue-rotate(170deg) saturate(6) brightness(0.9)';
+      }
+      ctx.drawImage(image, gx - renderWidth / 2, gy - renderHeight / 2, renderWidth, renderHeight);
+      ctx.restore();
+    };
+
     const draw = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       const data = gameData.current;
-      
       const wallColor = MAZE_COLORS[(level - 1) % MAZE_COLORS.length];
 
       data.maze.forEach((row, y) => {
@@ -356,23 +413,19 @@ export default function App() {
           }
 
           if (cell === 1) {
-            // Neon Hollow Walls
             ctx.strokeStyle = wallColor; 
             ctx.lineWidth = 2;
             ctx.shadowColor = wallColor; 
             ctx.shadowBlur = 8;
-            // Draw slightly smaller rects for a tubular look
             ctx.strokeRect(x * TILE_SIZE + 3, y * TILE_SIZE + 3, TILE_SIZE - 6, TILE_SIZE - 6);
             ctx.shadowBlur = 0;
           } else if (cell === 2) {
-            // Glowing small dots
             ctx.fillStyle = '#ffcc99';
             ctx.shadowColor = '#ffcc99';
             ctx.shadowBlur = 4;
             ctx.beginPath(); ctx.arc(x * TILE_SIZE + TILE_SIZE/2, y * TILE_SIZE + TILE_SIZE/2, 2.5, 0, Math.PI * 2); ctx.fill();
             ctx.shadowBlur = 0;
           } else if (cell === 3) {
-            // Pulsing Power Pellets
             const pulse = 6 + Math.sin(Date.now() / 150) * 2;
             ctx.fillStyle = '#ff00ff';
             ctx.shadowColor = '#ff00ff'; 
@@ -380,7 +433,6 @@ export default function App() {
             ctx.beginPath(); ctx.arc(x * TILE_SIZE + TILE_SIZE/2, y * TILE_SIZE + TILE_SIZE/2, pulse, 0, Math.PI * 2); ctx.fill();
             ctx.shadowBlur = 0;
           } else if (cell === 4) {
-            // Ghost Pen Gate
             ctx.fillStyle = '#ffb8ff'; 
             ctx.shadowColor = '#ffb8ff';
             ctx.shadowBlur = 8;
@@ -421,45 +473,7 @@ export default function App() {
         ctx.shadowBlur = 0;
       }
 
-      data.ghosts.forEach(g => {
-        const gx = g.x * TILE_SIZE + TILE_SIZE/2;
-        const gy = g.y * TILE_SIZE + TILE_SIZE/2;
-        
-        let color = g.color;
-        if (g.mode === 'frightened') {
-          color = (data.frightenedTimer < 150 && Math.floor(data.frightenedTimer / 15) % 2 === 0) ? '#ffffff' : '#0000ff';
-        }
-
-        if (g.mode !== 'eaten') {
-          ctx.fillStyle = color;
-          ctx.shadowColor = color;
-          ctx.shadowBlur = 15;
-          ctx.beginPath();
-          ctx.arc(gx, gy, TILE_SIZE/2.2, Math.PI, 0);
-          ctx.lineTo(gx + TILE_SIZE/2.2, gy + TILE_SIZE/2.2);
-          ctx.lineTo(gx + TILE_SIZE/4, gy + TILE_SIZE/3);
-          ctx.lineTo(gx, gy + TILE_SIZE/2.2);
-          ctx.lineTo(gx - TILE_SIZE/4, gy + TILE_SIZE/3);
-          ctx.lineTo(gx - TILE_SIZE/2.2, gy + TILE_SIZE/2.2);
-          ctx.fill();
-          ctx.shadowBlur = 0;
-        }
-
-        ctx.fillStyle = g.mode === 'frightened' ? '#ffb8ff' : '#ffffff';
-        ctx.beginPath();
-        ctx.arc(gx - TILE_SIZE/6, gy - TILE_SIZE/6, TILE_SIZE/6, 0, Math.PI * 2);
-        ctx.arc(gx + TILE_SIZE/6, gy - TILE_SIZE/6, TILE_SIZE/6, 0, Math.PI * 2);
-        ctx.fill();
-
-        if (g.mode !== 'frightened') {
-          ctx.fillStyle = '#0000ff';
-          ctx.beginPath();
-          const pDx = g.dx * 2; const pDy = g.dy * 2;
-          ctx.arc(gx - TILE_SIZE/6 + pDx, gy - TILE_SIZE/6 + pDy, TILE_SIZE/12, 0, Math.PI * 2);
-          ctx.arc(gx + TILE_SIZE/6 + pDx, gy - TILE_SIZE/6 + pDy, TILE_SIZE/12, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      });
+      data.ghosts.forEach(g => drawGhostSprite(g));
     };
 
     const loop = () => {
