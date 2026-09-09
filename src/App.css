@@ -13,13 +13,13 @@ body,
 #root {
   margin: 0;
   min-height: 100%;
+  width: 100%;
 }
 
 body {
   padding: 0;
   background-color: var(--bg-color);
-  /* Synthwave Grid Background */
-  background-image: 
+  background-image:
     linear-gradient(rgba(5, 5, 5, 0.9), rgba(5, 5, 5, 0.9)),
     repeating-linear-gradient(transparent, transparent 50px, rgba(0, 255, 255, 0.15) 50px, rgba(0, 255, 255, 0.15) 52px),
     repeating-linear-gradient(90deg, transparent, transparent 50px, rgba(255, 0, 255, 0.15) 50px, rgba(255, 0, 255, 0.15) 52px);
@@ -35,19 +35,22 @@ body {
   overscroll-behavior: none;
 }
 
-.game-container {
+.app-container {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 20px;
+  justify-content: center;
+  gap: 18px;
   z-index: 10;
   width: min(100%, 640px);
+  max-height: 100dvh;
   padding: 12px;
 }
 
-.header {
+.game-header {
   display: flex;
   justify-content: space-between;
+  align-items: flex-start;
   width: 100%;
   max-width: 600px;
   text-shadow: 0 0 10px var(--neon-blue);
@@ -59,9 +62,12 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   min-width: 0;
   text-align: center;
+  flex: 1;
+  white-space: nowrap;
 }
 
 .stat-value {
@@ -69,10 +75,12 @@ body {
   text-shadow: 0 0 10px var(--neon-pink);
 }
 
-.canvas-wrapper {
+.game-wrapper {
   position: relative;
   width: min(100%, 456px);
-  /* An ambient background glow that doesn't create hard physical borders */
+  max-width: 456px;
+  aspect-ratio: 1 / 1;
+  flex: 0 1 auto;
   box-shadow: 0 0 40px rgba(0, 255, 255, 0.2), 0 0 40px rgba(255, 0, 255, 0.2);
   border-radius: 4px;
   touch-action: none;
@@ -80,13 +88,12 @@ body {
   user-select: none;
 }
 
-canvas {
+.game-canvas {
   background-color: rgba(0, 0, 0, 0.6);
   display: block;
   width: 100%;
-  height: auto;
+  height: 100%;
   max-width: 100%;
-  /* Top and Bottom borders only! This leaves the side tunnels open */
   border-top: 3px solid var(--neon-blue);
   border-bottom: 3px solid var(--neon-pink);
   border-radius: 4px;
@@ -97,7 +104,7 @@ canvas {
 
 .overlay {
   position: absolute;
-  top: 0; left: 0; right: 0; bottom: 0;
+  inset: 0;
   background: rgba(0, 0, 0, 0.85);
   display: flex;
   flex-direction: column;
@@ -108,7 +115,7 @@ canvas {
   touch-action: manipulation;
 }
 
-.overlay h1 {
+.title {
   color: var(--neon-pink);
   text-shadow: 0 0 15px var(--neon-pink);
   font-size: 32px;
@@ -123,7 +130,8 @@ canvas {
 }
 
 .css-pacman {
-  width: 0; height: 0;
+  width: 0;
+  height: 0;
   border: 20px solid #ffff00;
   border-right-color: transparent;
   border-radius: 50%;
@@ -131,7 +139,6 @@ canvas {
   filter: drop-shadow(0 0 10px #ffff00);
 }
 
-/* The title-screen enemies now use the same real transparent PNG sprites as gameplay. */
 .css-ghost {
   width: 38px;
   height: 48px;
@@ -180,12 +187,12 @@ button:hover {
 }
 
 @media (max-width: 600px) {
-  .game-container {
+  .app-container {
     gap: 10px;
     padding: 8px;
   }
 
-  .header {
+  .game-header {
     gap: 6px;
     font-size: clamp(8px, 2.6vw, 12px);
   }
@@ -194,11 +201,11 @@ button:hover {
     gap: 5px;
   }
 
-  .canvas-wrapper {
+  .game-wrapper {
     width: min(100%, 456px);
   }
 
-  .overlay h1 {
+  .title {
     font-size: clamp(20px, 7vw, 30px);
   }
 
@@ -210,16 +217,16 @@ button:hover {
 }
 
 @media (max-height: 700px) and (orientation: landscape) {
-  .game-container {
+  .app-container {
     gap: 6px;
     padding: 6px;
   }
 
-  .header {
+  .game-header {
     font-size: 9px;
   }
 
-  .canvas-wrapper {
+  .game-wrapper {
     width: min(70vh, 456px);
   }
 }
