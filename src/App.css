@@ -77,7 +77,7 @@ body {
 
 .game-wrapper {
   position: relative;
-  width: min(100%, 456px);
+  width: min(100%, 456px, calc(100dvh - 130px));
   max-width: 456px;
   aspect-ratio: 1 / 1;
   flex: 0 1 auto;
@@ -202,7 +202,7 @@ button:hover {
   }
 
   .game-wrapper {
-    width: min(100%, 456px);
+    width: min(100%, 456px, calc(100dvh - 110px));
   }
 
   .title {
@@ -227,6 +227,6 @@ button:hover {
   }
 
   .game-wrapper {
-    width: min(70vh, 456px);
+    width: min(70vh, 456px, calc(100dvh - 90px));
   }
 }
