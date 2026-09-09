@@ -30,24 +30,35 @@ const LEVEL_1_MAZE = [
 const TILE_SIZE = 24;
 const MAZE_WIDTH = LEVEL_1_MAZE[0].length;
 const MAZE_HEIGHT = LEVEL_1_MAZE.length;
-const GHOST_RENDER_HEIGHT = 38;
 const GHOST_PEN = { x: 9, y: 9 };
+const GHOST_RENDER_HEIGHT = 38;
+const MAZE_COLORS = ['#00ffff', '#00ff00', '#ff00ff', '#ffff00', '#ff0000'];
 const FRUITS = ['🍒', '🍓', '🍊', '🍎', '🍈'];
-const GHOST_SPRITES = { blinky: blinkySprite, pinky: pinkySprite, inky: inkySprite, clyde: clydeSprite };
-
-const SPEED = {
-  pacman: [0.8, 0.9, 0.9, 0.9, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.9],
-  ghost: [0.75, 0.85, 0.85, 0.85, 0.95],
-  frightenedGhost: [0.5, 0.55, 0.55, 0.55, 0.6],
-  frightenedPacman: [0.9, 0.95, 0.95, 0.95, 1.0],
+const GHOST_SPRITES = {
+  blinky: blinkySprite,
+  pinky: pinkySprite,
+  inky: inkySprite,
+  clyde: clydeSprite,
 };
 
+// Pac-Man style speed progression. Values are tiles per fixed 60 Hz simulation step.
+// Normal Level 1 is intentionally slower than later levels; a power pellet does not slow Pac-Man.
+const PACMAN_SPEED = [0.08, 0.09, 0.09, 0.09, 0.1];
+const GHOST_SPEED = [0.075, 0.085, 0.085, 0.085, 0.095];
+const FRIGHTENED_GHOST_SPEED = [0.05, 0.055, 0.055, 0.055, 0.06];
+const EATEN_GHOST_SPEED = 0.2;
+
+const speedFor = (table, level) => table[Math.min(level - 1, table.length - 1)];
 const copyMaze = () => LEVEL_1_MAZE.map(row => [...row]);
-const levelSpeed = (level) => SPEED.pacman[Math.min(level - 1, 20)] ?? 0.9;
-const ghostSpeed = (level) => SPEED.ghost[Math.min(level - 1, 4)] ?? 0.95;
-const frightenedGhostSpeed = (level) => SPEED.frightenedGhost[Math.min(level - 1, 4)] ?? 0.6;
-const frightenedPacmanSpeed = (level) => SPEED.frightenedPacman[Math.min(level - 1, 4)] ?? 1;
 const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+const GHOST_IMAGES = Object.fromEntries(
+  Object.entries(GHOST_SPRITES).map(([id, src]) => {
+    const image = new Image();
+    image.src = src;
+    return [id, image];
+  }),
+);
 
 let audioCtx = null;
 const ensureAudio = () => {
@@ -62,22 +73,45 @@ const ensureAudio = () => {
 const playSound = (type) => {
   const ctx = ensureAudio();
   if (!ctx) return;
+
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
-  osc.connect(gain); gain.connect(ctx.destination);
+  osc.connect(gain);
+  gain.connect(ctx.destination);
   const now = ctx.currentTime;
+
   if (type === 'eat') {
-    osc.type = 'square'; osc.frequency.setValueAtTime(800, now); osc.frequency.exponentialRampToValueAtTime(1200, now + 0.05);
-    gain.gain.setValueAtTime(0.02, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05); osc.start(now); osc.stop(now + 0.05);
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(800, now);
+    osc.frequency.exponentialRampToValueAtTime(1200, now + 0.05);
+    gain.gain.setValueAtTime(0.02, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+    osc.start(now);
+    osc.stop(now + 0.05);
   } else if (type === 'power') {
-    osc.type = 'sine'; osc.frequency.setValueAtTime(400, now); osc.frequency.linearRampToValueAtTime(800, now + 0.25);
-    gain.gain.setValueAtTime(0.05, now); gain.gain.linearRampToValueAtTime(0, now + 0.25); osc.start(now); osc.stop(now + 0.25);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(400, now);
+    osc.frequency.linearRampToValueAtTime(800, now + 0.3);
+    gain.gain.setValueAtTime(0.05, now);
+    gain.gain.linearRampToValueAtTime(0, now + 0.3);
+    osc.start(now);
+    osc.stop(now + 0.3);
   } else if (type === 'eat_ghost') {
-    osc.type = 'sawtooth'; osc.frequency.setValueAtTime(1200, now); osc.frequency.exponentialRampToValueAtTime(200, now + 0.2);
-    gain.gain.setValueAtTime(0.08, now); gain.gain.linearRampToValueAtTime(0, now + 0.2); osc.start(now); osc.stop(now + 0.2);
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(1200, now);
+    osc.frequency.exponentialRampToValueAtTime(200, now + 0.2);
+    gain.gain.setValueAtTime(0.08, now);
+    gain.gain.linearRampToValueAtTime(0, now + 0.2);
+    osc.start(now);
+    osc.stop(now + 0.2);
   } else if (type === 'die') {
-    osc.type = 'sawtooth'; osc.frequency.setValueAtTime(300, now); osc.frequency.exponentialRampToValueAtTime(50, now + 0.65);
-    gain.gain.setValueAtTime(0.1, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.65); osc.start(now); osc.stop(now + 0.65);
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(300, now);
+    osc.frequency.exponentialRampToValueAtTime(50, now + 0.8);
+    gain.gain.setValueAtTime(0.1, now);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.8);
+    osc.start(now);
+    osc.stop(now + 0.8);
   }
 };
 
@@ -87,8 +121,8 @@ export default function App() {
   const livesRef = useRef(3);
   const levelRef = useRef(1);
   const gameStateRef = useRef('START');
-  const touchRef = useRef(null);
   const deathTimerRef = useRef(null);
+  const levelTimerRef = useRef(null);
 
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(() => Number(localStorage.getItem('pacman-highscore')) || 0);
@@ -110,18 +144,29 @@ export default function App() {
     deathPending: false,
   });
 
-  const syncStateRefs = useCallback(() => {
+  const syncRefs = useCallback(() => {
     scoreRef.current = score;
     livesRef.current = lives;
     levelRef.current = level;
     gameStateRef.current = gameState;
   }, [score, lives, level, gameState]);
 
-  useEffect(() => { syncStateRefs(); }, [syncStateRefs]);
+  useEffect(() => {
+    syncRefs();
+  }, [syncRefs]);
 
   const resetPositions = useCallback(() => {
     const data = gameData.current;
-    data.pacman = { ...data.pacman, x: 9, y: 15, dx: 0, dy: 0, nextDx: 0, nextDy: 0, frame: 0 };
+    data.pacman = {
+      ...data.pacman,
+      x: 9,
+      y: 15,
+      dx: 0,
+      dy: 0,
+      nextDx: 0,
+      nextDy: 0,
+      frame: 0,
+    };
     data.ghosts = [
       { id: 'blinky', x: 9, y: 7, dx: -1, dy: 0, color: '#ff0000', mode: 'normal' },
       { id: 'pinky', x: 9, y: 9, dx: 0, dy: -1, color: '#ffb8ff', mode: 'normal' },
@@ -133,34 +178,54 @@ export default function App() {
     data.deathPending = false;
   }, []);
 
-  const initLevel = useCallback((lvl, currentScore = 0, currentLives = 3) => {
+  const initLevel = useCallback((nextLevel, currentScore = 0, currentLives = 3) => {
     const data = gameData.current;
     data.maze = copyMaze();
     resetPositions();
+
     let pellets = 0;
-    data.maze.forEach(row => row.forEach(cell => { if (cell === 2 || cell === 3) pellets += 1; }));
+    data.maze.forEach(row => row.forEach(cell => {
+      if (cell === 2 || cell === 3) pellets += 1;
+    }));
+
     data.pelletsCount = pellets;
     data.fruitActive = false;
     data.fruitTimer = 0;
     data.levelClearing = false;
     data.pacman.nextDx = 0;
     data.pacman.nextDy = 0;
-    levelRef.current = lvl;
+    levelRef.current = nextLevel;
     scoreRef.current = currentScore;
     livesRef.current = currentLives;
-    setLevel(lvl);
+
+    setLevel(nextLevel);
     setScore(currentScore);
     setLives(currentLives);
   }, [resetPositions]);
 
   const startGame = useCallback(() => {
+    if (deathTimerRef.current) {
+      clearTimeout(deathTimerRef.current);
+      deathTimerRef.current = null;
+    }
+    if (levelTimerRef.current) {
+      clearTimeout(levelTimerRef.current);
+      levelTimerRef.current = null;
+    }
+
     ensureAudio();
     initLevel(1, 0, 3);
+    gameData.current.deathPending = false;
     gameStateRef.current = 'PLAYING';
     setGameState('PLAYING');
   }, [initLevel]);
 
-  const setDirection = useCallback((dx, dy) => {
+  const addScore = useCallback((points) => {
+    scoreRef.current += points;
+    setScore(scoreRef.current);
+  }, []);
+
+  const queueDirection = useCallback((dx, dy) => {
     if (gameStateRef.current !== 'PLAYING') return;
     const p = gameData.current.pacman;
     p.nextDx = dx;
@@ -168,64 +233,84 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const onKey = (e) => {
+    const onKeyDown = (event) => {
+      if (event.code === 'Space') {
+        event.preventDefault();
+        if (gameStateRef.current !== 'PLAYING') startGame();
+        return;
+      }
       if (gameStateRef.current !== 'PLAYING') return;
-      if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
-      if (e.key === 'ArrowUp') setDirection(0, -1);
-      if (e.key === 'ArrowDown') setDirection(0, 1);
-      if (e.key === 'ArrowLeft') setDirection(-1, 0);
-      if (e.key === 'ArrowRight') setDirection(1, 0);
-      if (e.code === 'Space') startGame();
-    };
-    window.addEventListener('keydown', onKey, { passive: false });
-    return () => window.removeEventListener('keydown', onKey);
-  }, [setDirection, startGame]);
 
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
+        event.preventDefault();
+      }
+      if (event.key === 'ArrowUp') queueDirection(0, -1);
+      if (event.key === 'ArrowDown') queueDirection(0, 1);
+      if (event.key === 'ArrowLeft') queueDirection(-1, 0);
+      if (event.key === 'ArrowRight') queueDirection(1, 0);
+    };
+
+    window.addEventListener('keydown', onKeyDown, { passive: false });
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [queueDirection, startGame]);
+
+  // iOS / mobile input: touch-action is disabled on the canvas and each swipe is
+  // converted immediately into the same direction buffer used by keyboard controls.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const threshold = 7;
+
+    const SWIPE_THRESHOLD = 6;
     let startX = 0;
     let startY = 0;
     let tracking = false;
 
-    const start = (e) => {
-      if (gameStateRef.current !== 'PLAYING' || !e.touches?.length) return;
-      const t = e.touches[0];
-      startX = t.clientX; startY = t.clientY; tracking = true;
-      e.preventDefault();
+    const handleTouchStart = (event) => {
+      if (gameStateRef.current !== 'PLAYING' || !event.touches.length) return;
+      const touch = event.touches[0];
+      startX = touch.clientX;
+      startY = touch.clientY;
+      tracking = true;
+      event.preventDefault();
     };
-    const move = (e) => {
-      if (!tracking || !e.touches?.length) return;
-      const t = e.touches[0];
-      const dx = t.clientX - startX;
-      const dy = t.clientY - startY;
-      e.preventDefault();
-      if (Math.max(Math.abs(dx), Math.abs(dy)) < threshold) return;
-      if (Math.abs(dx) > Math.abs(dy)) setDirection(dx > 0 ? 1 : -1, 0);
-      else setDirection(0, dy > 0 ? 1 : -1);
+
+    const handleTouchMove = (event) => {
+      if (!tracking || gameStateRef.current !== 'PLAYING' || !event.touches.length) return;
+      const touch = event.touches[0];
+      const dx = touch.clientX - startX;
+      const dy = touch.clientY - startY;
+      event.preventDefault();
+
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < SWIPE_THRESHOLD) return;
+
+      if (Math.abs(dx) > Math.abs(dy)) {
+        queueDirection(dx > 0 ? 1 : -1, 0);
+      } else {
+        queueDirection(0, dy > 0 ? 1 : -1);
+      }
+
+      // Re-base the gesture so small follow-up finger movements can request the next turn.
+      startX = touch.clientX;
+      startY = touch.clientY;
+    };
+
+    const handleTouchEnd = (event) => {
+      event.preventDefault();
       tracking = false;
     };
-    const end = (e) => { e.preventDefault(); tracking = false; };
 
-    canvas.addEventListener('touchstart', start, { passive: false });
-    canvas.addEventListener('touchmove', move, { passive: false });
-    canvas.addEventListener('touchend', end, { passive: false });
-    canvas.addEventListener('touchcancel', end, { passive: false });
+    canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+    canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+    canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
+    canvas.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+
     return () => {
-      canvas.removeEventListener('touchstart', start);
-      canvas.removeEventListener('touchmove', move);
-      canvas.removeEventListener('touchend', end);
-      canvas.removeEventListener('touchcancel', end);
+      canvas.removeEventListener('touchstart', handleTouchStart);
+      canvas.removeEventListener('touchmove', handleTouchMove);
+      canvas.removeEventListener('touchend', handleTouchEnd);
+      canvas.removeEventListener('touchcancel', handleTouchEnd);
     };
-  }, [setDirection]);
-
-  useEffect(() => {
-    if (score > highScore) {
-      setHighScore(score);
-      localStorage.setItem('pacman-highscore', String(score));
-    }
-  }, [score, highScore]);
+  }, [queueDirection]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -236,12 +321,23 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (score > highScore) {
+      setHighScore(score);
+      localStorage.setItem('pacman-highscore', String(score));
+    }
+  }, [score, highScore]);
+
+  useEffect(() => {
     if (gameState !== 'PLAYING' && gameState !== 'DIED') return undefined;
+
     const canvas = canvasRef.current;
     if (!canvas) return undefined;
     const ctx = canvas.getContext('2d');
+    if (!ctx) return undefined;
+
     const data = gameData.current;
-    const FIXED_STEP = 1000 / 60;
+    const FIXED_STEP_MS = 1000 / 60;
+    const TURN_BUFFER = 0.28;
     let accumulator = 0;
     let previousTime = performance.now();
 
@@ -255,67 +351,87 @@ export default function App() {
       return false;
     };
 
-    const tryPacmanTurn = (p) => {
+    const canMove = (x, y, dx, dy, isGhost = false) => !isWall(x + dx, y + dy, isGhost);
+
+    const tryPacmanTurn = () => {
+      const p = data.pacman;
       const cx = Math.round(p.x);
       const cy = Math.round(p.y);
-      const onHorizontal = Math.abs(p.y - cy) <= 0.34;
-      const onVertical = Math.abs(p.x - cx) <= 0.34;
-      const wantsHorizontal = p.nextDx !== 0;
-      const canTry = (wantsHorizontal && onHorizontal) || (!wantsHorizontal && p.nextDy !== 0 && onVertical);
-      if (!canTry) return;
-      const targetX = wantsHorizontal ? p.x : cx;
-      const targetY = wantsHorizontal ? cy : p.y;
-      if (!isWall(targetX + p.nextDx, targetY + p.nextDy)) {
-        if (!wantsHorizontal) p.y = cy;
-        if (wantsHorizontal) p.x = p.x;
+      const horizontal = p.nextDx !== 0;
+      const nearHorizontalCenter = Math.abs(p.y - cy) <= TURN_BUFFER;
+      const nearVerticalCenter = Math.abs(p.x - cx) <= TURN_BUFFER;
+
+      if (horizontal && nearHorizontalCenter && canMove(p.x, cy, p.nextDx, 0)) {
+        p.y = cy;
         p.dx = p.nextDx;
-        p.dy = p.nextDy;
+        p.dy = 0;
         return;
       }
-      if (isWall(cx + p.dx, cy + p.dy)) {
-        p.dx = 0; p.dy = 0;
+
+      if (!horizontal && p.nextDy !== 0 && nearVerticalCenter && canMove(cx, p.y, 0, p.nextDy)) {
+        p.x = cx;
+        p.dx = 0;
+        p.dy = p.nextDy;
       }
     };
 
-    const chooseGhostDirection = (g, targetX, targetY, frightened) => {
+    const chooseGhostDirection = (ghost, targetX, targetY, frightened) => {
       const moves = [
-        { dx: 0, dy: -1 }, { dx: 0, dy: 1 }, { dx: -1, dy: 0 }, { dx: 1, dy: 0 },
-      ].filter(m => {
-        if (m.dx === -g.dx && m.dy === -g.dy && (g.dx !== 0 || g.dy !== 0)) return false;
-        const nx = Math.round(g.x + m.dx);
-        const ny = Math.round(g.y + m.dy);
+        { dx: 0, dy: -1 },
+        { dx: 0, dy: 1 },
+        { dx: -1, dy: 0 },
+        { dx: 1, dy: 0 },
+      ].filter(move => {
+        if (move.dx === -ghost.dx && move.dy === -ghost.dy && (ghost.dx !== 0 || ghost.dy !== 0)) return false;
+        const nx = Math.round(ghost.x + move.dx);
+        const ny = Math.round(ghost.y + move.dy);
         if (ny === 9 && (nx < 0 || nx >= MAZE_WIDTH)) return true;
         const cell = data.maze[ny]?.[nx];
         if (cell === undefined || cell === 1) return false;
         const inPen = nx >= 8 && nx <= 10 && ny >= 8 && ny <= 10;
-        if (cell === 4 && g.mode !== 'eaten' && !inPen) return false;
+        if (cell === 4 && ghost.mode !== 'eaten' && !inPen) return false;
         return true;
       });
-      if (!moves.length) { g.dx *= -1; g.dy *= -1; return; }
-      if (frightened) {
-        const pick = moves[Math.floor(Math.random() * moves.length)];
-        g.dx = pick.dx; g.dy = pick.dy;
+
+      if (!moves.length) {
+        ghost.dx *= -1;
+        ghost.dy *= -1;
         return;
       }
+
+      if (frightened) {
+        const pick = moves[Math.floor(Math.random() * moves.length)];
+        ghost.dx = pick.dx;
+        ghost.dy = pick.dy;
+        return;
+      }
+
       moves.sort((a, b) => {
-        const da = Math.hypot((g.x + a.dx) - targetX, (g.y + a.dy) - targetY);
-        const db = Math.hypot((g.x + b.dx) - targetX, (g.y + b.dy) - targetY);
+        const da = Math.hypot((ghost.x + a.dx) - targetX, (ghost.y + a.dy) - targetY);
+        const db = Math.hypot((ghost.x + b.dx) - targetX, (ghost.y + b.dy) - targetY);
         return da - db;
       });
-      g.dx = moves[0].dx; g.dy = moves[0].dy;
+
+      ghost.dx = moves[0].dx;
+      ghost.dy = moves[0].dy;
     };
 
     const die = () => {
       if (data.deathPending || gameStateRef.current !== 'PLAYING') return;
+
       data.deathPending = true;
-      playSound('die');
       gameStateRef.current = 'DIED';
       setGameState('DIED');
+      playSound('die');
+
+      if (deathTimerRef.current) clearTimeout(deathTimerRef.current);
       deathTimerRef.current = window.setTimeout(() => {
+        deathTimerRef.current = null;
         const nextLives = Math.max(0, livesRef.current - 1);
         livesRef.current = nextLives;
         setLives(nextLives);
         data.deathPending = false;
+
         if (nextLives > 0) {
           resetPositions();
           gameStateRef.current = 'PLAYING';
@@ -329,60 +445,86 @@ export default function App() {
 
     const update = () => {
       if (gameStateRef.current !== 'PLAYING') return;
+      if (data.levelClearing) return;
+
       const p = data.pacman;
       const currentLevel = levelRef.current;
-      const pacSpeed = 0.042088 * levelSpeed(currentLevel) * (data.frightenedTimer > 0 ? frightenedPacmanSpeed(currentLevel) : 1);
+      const pacmanSpeed = speedFor(PACMAN_SPEED, currentLevel);
+      const ghostNormalSpeed = speedFor(GHOST_SPEED, currentLevel);
+      const frightenedSpeed = speedFor(FRIGHTENED_GHOST_SPEED, currentLevel);
 
-      tryPacmanTurn(p);
-      if (isWall(p.x + p.dx * pacSpeed, p.y + p.dy * pacSpeed)) {
-        p.dx = 0; p.dy = 0;
-        tryPacmanTurn(p);
+      tryPacmanTurn();
+
+      if (isWall(p.x + p.dx * pacmanSpeed, p.y + p.dy * pacmanSpeed)) {
+        p.dx = 0;
+        p.dy = 0;
+        tryPacmanTurn();
       }
-      p.x += p.dx * pacSpeed;
-      p.y += p.dy * pacSpeed;
+
+      p.x += p.dx * pacmanSpeed;
+      p.y += p.dy * pacmanSpeed;
+
       if (p.x < -0.5) p.x = MAZE_WIDTH - 0.5;
       if (p.x > MAZE_WIDTH - 0.5) p.x = -0.5;
-      p.frame += 0.25;
+      p.frame += 0.2;
 
-      if (data.frightenedTimer > 0) data.frightenedTimer -= 1;
+      if (data.frightenedTimer > 0) {
+        data.frightenedTimer -= 1;
+        if (data.frightenedTimer === 0) {
+          data.ghosts.forEach(ghost => {
+            if (ghost.mode === 'frightened') ghost.mode = 'normal';
+          });
+        }
+      }
+
       if (data.fruitActive) {
         data.fruitTimer -= 1;
-        if (data.fruitTimer <= 0) data.fruitActive = false;
-        else if (distance(p, { x: 9, y: 11 }) < 1.1) {
-          scoreRef.current += currentLevel * 100;
-          setScore(scoreRef.current);
+        if (distance(p, { x: 9, y: 11 }) < 1.15) {
+          addScore(currentLevel * 100);
           data.fruitActive = false;
           playSound('eat');
+        } else if (data.fruitTimer <= 0) {
+          data.fruitActive = false;
         }
       }
 
       const cx = Math.round(p.x);
       const cy = Math.round(p.y);
       const cell = data.maze[cy]?.[cx];
+
       if (cell === 2 || cell === 3) {
         data.maze[cy][cx] = 0;
         data.pelletsCount -= 1;
+
         if (cell === 3) {
-          scoreRef.current += 50;
-          setScore(scoreRef.current);
-          data.frightenedTimer = [360,300,240,180][Math.min(currentLevel - 1, 3)] || 120;
+          addScore(50);
+          // Power pellet changes ghost state only; Pac-Man itself does not suddenly slow down.
+          data.frightenedTimer = currentLevel <= 1 ? 360 : currentLevel <= 4 ? 300 : 240;
           data.ghostMultiplier = 200;
-          data.ghosts.forEach(g => { if (g.mode === 'normal') { g.mode = 'frightened'; g.dx *= -1; g.dy *= -1; } });
+          data.ghosts.forEach(ghost => {
+            if (ghost.mode === 'normal') {
+              ghost.mode = 'frightened';
+              ghost.dx *= -1;
+              ghost.dy *= -1;
+            }
+          });
           playSound('power');
         } else {
-          scoreRef.current += 10;
-          setScore(scoreRef.current);
+          addScore(10);
           playSound('eat');
         }
+
         if (data.pelletsCount === 100 || data.pelletsCount === 40) {
           data.fruitActive = true;
           data.fruitTimer = 500;
         }
+
         if (data.pelletsCount <= 0 && !data.levelClearing) {
           data.levelClearing = true;
-          const next = currentLevel + 1;
-          window.setTimeout(() => {
-            initLevel(next, scoreRef.current, livesRef.current);
+          const nextLevel = currentLevel + 1;
+          levelTimerRef.current = window.setTimeout(() => {
+            levelTimerRef.current = null;
+            initLevel(nextLevel, scoreRef.current, livesRef.current);
             gameStateRef.current = 'PLAYING';
             setGameState('PLAYING');
           }, 350);
@@ -390,125 +532,229 @@ export default function App() {
         }
       }
 
-      const normalGhostSpeed = 0.039465 * ghostSpeed(currentLevel);
-      const scaredGhostSpeed = 0.039465 * frightenedGhostSpeed(currentLevel);
-      data.ghosts.forEach(g => {
-        const activeSpeed = g.mode === 'frightened' ? scaredGhostSpeed : g.mode === 'eaten' ? 0.08 : normalGhostSpeed;
-        const gx = Math.round(g.x);
-        const gy = Math.round(g.y);
-        if (Math.abs(g.x - gx) <= activeSpeed && Math.abs(g.y - gy) <= activeSpeed) {
-          g.x = gx; g.y = gy;
-          if (g.mode === 'eaten') {
-            chooseGhostDirection(g, GHOST_PEN.x, GHOST_PEN.y, false);
-            if (Math.abs(g.x - GHOST_PEN.x) < 0.1 && Math.abs(g.y - GHOST_PEN.y) < 0.1) g.mode = 'normal';
-          } else if (g.mode === 'frightened') {
-            chooseGhostDirection(g, p.x, p.y, true);
+      data.ghosts.forEach(ghost => {
+        const activeSpeed = ghost.mode === 'frightened'
+          ? frightenedSpeed
+          : ghost.mode === 'eaten'
+            ? EATEN_GHOST_SPEED
+            : ghostNormalSpeed;
+
+        const gx = Math.round(ghost.x);
+        const gy = Math.round(ghost.y);
+
+        if (Math.abs(ghost.x - gx) <= activeSpeed / 2 && Math.abs(ghost.y - gy) <= activeSpeed / 2) {
+          ghost.x = gx;
+          ghost.y = gy;
+
+          if (ghost.mode === 'eaten') {
+            chooseGhostDirection(ghost, GHOST_PEN.x, GHOST_PEN.y, false);
+            if (ghost.x === GHOST_PEN.x && ghost.y === GHOST_PEN.y) ghost.mode = 'normal';
+          } else if (ghost.mode === 'frightened') {
+            chooseGhostDirection(ghost, p.x, p.y, true);
           } else {
-            let targetX = p.x, targetY = p.y;
-            if (g.id === 'pinky') { targetX = p.x + p.dx * 4; targetY = p.y + p.dy * 4; }
-            if (g.id === 'inky') { targetX = p.x + p.dx * 2; targetY = p.y + p.dy * 2; }
-            if (g.id === 'clyde' && distance(g, p) < 8) { targetX = 0; targetY = MAZE_HEIGHT - 1; }
-            chooseGhostDirection(g, targetX, targetY, false);
+            let targetX = p.x;
+            let targetY = p.y;
+
+            if (ghost.id === 'pinky') {
+              targetX = p.x + p.dx * 4;
+              targetY = p.y + p.dy * 4;
+            } else if (ghost.id === 'inky') {
+              const blinky = data.ghosts[0];
+              targetX = p.x + (p.x - blinky.x);
+              targetY = p.y + (p.y - blinky.y);
+            } else if (ghost.id === 'clyde' && distance(ghost, p) <= 8) {
+              targetX = 0;
+              targetY = MAZE_HEIGHT - 1;
+            }
+
+            chooseGhostDirection(ghost, targetX, targetY, false);
           }
         }
-        if (!isWall(g.x + g.dx * activeSpeed, g.y + g.dy * activeSpeed, true)) {
-          g.x += g.dx * activeSpeed;
-          g.y += g.dy * activeSpeed;
-        } else {
-          g.dx = 0; g.dy = 0;
-        }
-        if (g.x < -0.5) g.x = MAZE_WIDTH - 0.5;
-        if (g.x > MAZE_WIDTH - 0.5) g.x = -0.5;
 
-        if (distance(g, p) < 0.62) {
-          if (g.mode === 'frightened') {
-            g.mode = 'eaten';
-            scoreRef.current += data.ghostMultiplier;
+        if (isWall(ghost.x + ghost.dx * activeSpeed, ghost.y + ghost.dy * activeSpeed, true)) {
+          ghost.dx = 0;
+          ghost.dy = 0;
+        } else {
+          ghost.x += ghost.dx * activeSpeed;
+          ghost.y += ghost.dy * activeSpeed;
+        }
+
+        if (ghost.x < -0.5) ghost.x = MAZE_WIDTH - 0.5;
+        if (ghost.x > MAZE_WIDTH - 0.5) ghost.x = -0.5;
+
+        if (distance(ghost, p) < 0.65) {
+          if (ghost.mode === 'frightened') {
+            ghost.mode = 'eaten';
+            addScore(data.ghostMultiplier);
             data.ghostMultiplier *= 2;
-            setScore(scoreRef.current);
             playSound('eat_ghost');
-          } else if (g.mode === 'normal') {
+          } else if (ghost.mode === 'normal') {
             die();
           }
         }
       });
     };
 
-    const drawGhost = (g) => {
-      const image = new Image();
-      image.src = GHOST_SPRITES[g.id];
-      const gx = g.x * TILE_SIZE + TILE_SIZE / 2;
-      const gy = g.y * TILE_SIZE + TILE_SIZE / 2;
-      const w = image.naturalWidth ? image.naturalWidth * (GHOST_RENDER_HEIGHT / image.naturalHeight) : 28;
-      const h = image.naturalHeight ? GHOST_RENDER_HEIGHT : 28;
-      if (g.mode === 'eaten') {
+    const drawGhost = (ghost) => {
+      const image = GHOST_IMAGES[ghost.id];
+      const gx = ghost.x * TILE_SIZE + TILE_SIZE / 2;
+      const gy = ghost.y * TILE_SIZE + TILE_SIZE / 2;
+
+      if (ghost.mode === 'eaten') {
         ctx.fillStyle = '#ffffff';
-        ctx.beginPath(); ctx.arc(gx, gy - 2, 5, 0, Math.PI * 2); ctx.fill();
+        ctx.shadowColor = '#ffffff';
+        ctx.shadowBlur = 6;
+        ctx.beginPath();
+        ctx.arc(gx - 3, gy, 3, 0, Math.PI * 2);
+        ctx.arc(gx + 3, gy, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
         return;
       }
+
+      const scale = image?.naturalHeight ? GHOST_RENDER_HEIGHT / image.naturalHeight : 1;
+      const width = image?.naturalWidth ? image.naturalWidth * scale : 24;
+      const height = image?.naturalHeight ? GHOST_RENDER_HEIGHT : 28;
+
       ctx.save();
       ctx.imageSmoothingEnabled = false;
-      if (g.mode === 'frightened') {
-        ctx.fillStyle = '#174dff'; ctx.shadowColor = '#174dff'; ctx.shadowBlur = 8;
-        ctx.beginPath(); ctx.arc(gx, gy, 10, 0, Math.PI * 2); ctx.fill();
-        ctx.globalAlpha = 0.78;
+
+      if (ghost.mode === 'frightened') {
+        const flashing = data.frightenedTimer < 150 && Math.floor(data.frightenedTimer / 15) % 2 === 0;
+        ctx.globalAlpha = 0.95;
+        ctx.shadowColor = flashing ? '#ffffff' : '#174dff';
+        ctx.shadowBlur = 12;
+        ctx.fillStyle = flashing ? '#ffffff' : '#174dff';
+        ctx.beginPath();
+        ctx.arc(gx, gy + 2, 12, 0, Math.PI * 2);
+        ctx.fill();
       } else {
-        ctx.shadowColor = g.color; ctx.shadowBlur = 10;
+        ctx.shadowColor = ghost.color;
+        ctx.shadowBlur = 14;
       }
-      if (image.complete && image.naturalWidth) ctx.drawImage(image, gx - w / 2, gy - h / 2, w, h);
-      else { ctx.fillStyle = g.color; ctx.beginPath(); ctx.arc(gx, gy, 9, Math.PI, 0); ctx.fill(); }
+
+      if (image?.complete && image.naturalWidth) {
+        ctx.drawImage(image, gx - width / 2, gy - height / 2, width, height);
+      } else {
+        ctx.fillStyle = ghost.mode === 'frightened' ? '#174dff' : ghost.color;
+        ctx.beginPath();
+        ctx.arc(gx, gy, TILE_SIZE / 2.2, Math.PI, 0);
+        ctx.lineTo(gx + TILE_SIZE / 2.2, gy + TILE_SIZE / 2.2);
+        ctx.lineTo(gx, gy + TILE_SIZE / 2);
+        ctx.lineTo(gx - TILE_SIZE / 2.2, gy + TILE_SIZE / 2.2);
+        ctx.closePath();
+        ctx.fill();
+      }
       ctx.restore();
     };
 
     const draw = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = '#050508'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#050508';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
       const wallColor = MAZE_COLORS[(levelRef.current - 1) % MAZE_COLORS.length];
-      data.maze.forEach((row, y) => row.forEach((cell, x) => {
-        const px = x * TILE_SIZE; const py = y * TILE_SIZE;
-        if (cell === 1) {
-          ctx.strokeStyle = wallColor; ctx.lineWidth = 2; ctx.shadowColor = wallColor; ctx.shadowBlur = 7;
-          ctx.strokeRect(px + 1, py + 1, TILE_SIZE - 2, TILE_SIZE - 2); ctx.shadowBlur = 0;
-        } else if (cell === 2 || cell === 3) {
-          ctx.fillStyle = cell === 3 ? '#ffffff' : '#ffe8b0';
-          ctx.shadowColor = cell === 3 ? '#ffffff' : '#ffd166'; ctx.shadowBlur = cell === 3 ? 8 : 3;
-          ctx.beginPath(); ctx.arc(px + TILE_SIZE / 2, py + TILE_SIZE / 2, cell === 3 ? 4 : 1.8, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
-        } else if (cell === 4) {
-          ctx.fillStyle = '#ffb8ff'; ctx.fillRect(px + 2, py + 10, TILE_SIZE - 4, 4);
-        }
-      }));
+
+      data.maze.forEach((row, y) => {
+        row.forEach((cell, x) => {
+          const px = x * TILE_SIZE;
+          const py = y * TILE_SIZE;
+
+          if (cell === 1) {
+            ctx.strokeStyle = wallColor;
+            ctx.lineWidth = 2;
+            ctx.shadowColor = wallColor;
+            ctx.shadowBlur = 8;
+            ctx.strokeRect(px + 3, py + 3, TILE_SIZE - 6, TILE_SIZE - 6);
+            ctx.shadowBlur = 0;
+          } else if (cell === 2) {
+            ctx.fillStyle = '#ffcc99';
+            ctx.shadowColor = '#ffcc99';
+            ctx.shadowBlur = 4;
+            ctx.beginPath();
+            ctx.arc(px + TILE_SIZE / 2, py + TILE_SIZE / 2, 2.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+          } else if (cell === 3) {
+            const pulse = 6 + Math.sin(Date.now() / 150) * 2;
+            ctx.fillStyle = '#ff00ff';
+            ctx.shadowColor = '#ff00ff';
+            ctx.shadowBlur = 15;
+            ctx.beginPath();
+            ctx.arc(px + TILE_SIZE / 2, py + TILE_SIZE / 2, pulse, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+          } else if (cell === 4) {
+            ctx.fillStyle = '#ffb8ff';
+            ctx.shadowColor = '#ffb8ff';
+            ctx.shadowBlur = 8;
+            ctx.fillRect(px, py + 10, TILE_SIZE, 4);
+            ctx.shadowBlur = 0;
+          }
+        });
+      });
+
+      if (data.fruitActive && levelRef.current < 20) {
+        ctx.font = '18px Arial';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'alphabetic';
+        ctx.shadowColor = '#ffffff';
+        ctx.shadowBlur = 10;
+        ctx.fillText(FRUITS[Math.min(levelRef.current - 1, FRUITS.length - 1)], 9 * TILE_SIZE + 2, 11 * TILE_SIZE + 18);
+        ctx.shadowBlur = 0;
+      }
 
       data.ghosts.forEach(drawGhost);
+
       const p = data.pacman;
-      const px = p.x * TILE_SIZE + TILE_SIZE / 2; const py = p.y * TILE_SIZE + TILE_SIZE / 2;
-      const mouth = Math.abs(Math.sin(p.frame)) * 0.35;
+      const pacmanX = p.x * TILE_SIZE + TILE_SIZE / 2;
+      const pacmanY = p.y * TILE_SIZE + TILE_SIZE / 2;
       const angle = p.dx === 1 ? 0 : p.dx === -1 ? Math.PI : p.dy === 1 ? Math.PI / 2 : p.dy === -1 ? -Math.PI / 2 : 0;
-      ctx.save(); ctx.translate(px, py); ctx.rotate(angle);
-      ctx.fillStyle = '#ffff00'; ctx.shadowColor = '#ffff00'; ctx.shadowBlur = 14;
-      ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0,TILE_SIZE/2.2,mouth,Math.PI*2-mouth); ctx.closePath(); ctx.fill(); ctx.restore();
-      if (data.fruitActive && levelRef.current < 20) {
-        ctx.font = '20px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(FRUITS[Math.min(levelRef.current - 1, FRUITS.length - 1)], 9*TILE_SIZE+TILE_SIZE/2, 11*TILE_SIZE+TILE_SIZE/2);
+      const mouthOpen = gameStateRef.current === 'DIED' ? Math.PI / 1.2 : Math.abs(Math.sin(p.frame)) * 0.5;
+
+      if (gameStateRef.current !== 'DIED' || Math.floor(Date.now() / 200) % 2 === 0) {
+        ctx.save();
+        ctx.translate(pacmanX, pacmanY);
+        ctx.rotate(angle);
+        ctx.fillStyle = '#ffff00';
+        ctx.shadowColor = '#ffff00';
+        ctx.shadowBlur = 15;
+        ctx.beginPath();
+        ctx.arc(0, 0, TILE_SIZE / 2.2, mouthOpen, Math.PI * 2 - mouthOpen);
+        ctx.lineTo(0, 0);
+        ctx.fill();
+        ctx.restore();
+        ctx.shadowBlur = 0;
       }
     };
 
-    const loop = (time) => {
-      const elapsed = Math.min(100, time - previousTime);
-      previousTime = time;
+    const loop = (timestamp) => {
+      const elapsed = Math.min(100, Math.max(0, timestamp - previousTime));
+      previousTime = timestamp;
       accumulator += elapsed;
-      while (accumulator >= FIXED_STEP) { update(); accumulator -= FIXED_STEP; }
+
+      while (accumulator >= FIXED_STEP_MS) {
+        update();
+        accumulator -= FIXED_STEP_MS;
+      }
+
       draw();
       data.animationId = requestAnimationFrame(loop);
     };
 
-    if (gameState === 'PLAYING' && !data.maze.length) initLevel(levelRef.current, scoreRef.current, livesRef.current);
-    if (gameState === 'PLAYING' || gameState === 'DIED') data.animationId = requestAnimationFrame(loop);
-    else draw();
+    if (gameState === 'PLAYING' && !data.maze.length) {
+      initLevel(levelRef.current, scoreRef.current, livesRef.current);
+    }
+
+    data.animationId = requestAnimationFrame(loop);
 
     return () => cancelAnimationFrame(data.animationId);
-  }, [gameState, initLevel, resetPositions]);
+  }, [gameState, initLevel, resetPositions, addScore]);
 
   useEffect(() => () => {
     if (deathTimerRef.current) clearTimeout(deathTimerRef.current);
+    if (levelTimerRef.current) clearTimeout(levelTimerRef.current);
+    if (gameData.current.animationId) cancelAnimationFrame(gameData.current.animationId);
   }, []);
 
   return (
@@ -519,8 +765,10 @@ export default function App() {
         <div className="stat-box"><span>LIVES</span><span className="stat-value">{lives}</span></div>
         <div className="stat-box"><span>HIGH SCORE</span><span className="stat-value">{highScore}</span></div>
       </div>
+
       <div className="game-wrapper">
         <canvas ref={canvasRef} className="game-canvas" aria-label="Neon Pacman game" />
+
         {gameState === 'START' && (
           <div className="overlay">
             <div className="landing-art">
@@ -534,9 +782,11 @@ export default function App() {
             <button onClick={startGame}>INSERT COIN</button>
           </div>
         )}
+
         {gameState === 'DIED' && (
           <div className="overlay"><h1>READY!</h1></div>
         )}
+
         {gameState === 'GAMEOVER' && (
           <div className="overlay"><h1>GAME OVER</h1><button onClick={startGame}>PLAY AGAIN</button></div>
         )}
