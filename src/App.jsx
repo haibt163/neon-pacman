@@ -28,12 +28,8 @@ const LEVEL_1_MAZE = [
 ];
 
 const TILE_SIZE = 24;
-// Large character art: intentionally about 2x Pac-Man's diameter.
-const GHOST_RENDER_HEIGHT = 48;
-const PACMAN_SPEED = 0.16;
-const GHOST_NORMAL_SPEED = 0.105;
-const GHOST_FRIGHTENED_SPEED = 0.085;
-const GHOST_EATEN_SPEED = 0.22;
+// Larger than Pac-Man's diameter so the imported character art reads as the main actors.
+const GHOST_RENDER_HEIGHT = 38;
 const GHOST_PEN = { x: 9, y: 9 };
 const MAZE_WIDTH = LEVEL_1_MAZE[0].length;
 const MAZE_COLORS = ['#00ffff', '#00ff00', '#ff00ff', '#ffff00', '#ff0000'];
@@ -94,22 +90,15 @@ const playSound = (type) => {
 export default function App() {
   const canvasRef = useRef(null);
   const touchStartRef = useRef(null);
-  const levelRef = useRef(level);
-  const livesRef = useRef(lives);
-  const scoreRef = useRef(score);
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(() => parseInt(localStorage.getItem('pacman-highscore')) || 0);
   const [level, setLevel] = useState(1);
   const [lives, setLives] = useState(3);
-  const [gameState, setGameState] = useState('START');
-
-  levelRef.current = level;
-  livesRef.current = lives;
-  scoreRef.current = score;
+  const [gameState, setGameState] = useState('START'); 
 
   const gameData = useRef({
     maze: [],
-    pacman: { x: 9, y: 15, dx: 0, dy: 0, nextDx: 0, nextDy: 0, frame: 0, speed: PACMAN_SPEED },
+    pacman: { x: 9, y: 15, dx: 0, dy: 0, nextDx: 0, nextDy: 0, frame: 0, speed: 0.1 }, 
     ghosts: [],
     pelletsCount: 0,
     frightenedTimer: 0,
@@ -129,7 +118,7 @@ export default function App() {
   }, [gameState]);
 
   const resetPositions = useCallback(() => {
-    gameData.current.pacman = { ...gameData.current.pacman, x: 9, y: 15, dx: 0, dy: 0, nextDx: 0, nextDy: 0, speed: PACMAN_SPEED };
+    gameData.current.pacman = { ...gameData.current.pacman, x: 9, y: 15, dx: 0, dy: 0, nextDx: 0, nextDy: 0 };
     gameData.current.ghosts = [
       { id: 'blinky', x: 9, y: 7, dx: -1, dy: 0, color: '#ff0000', mode: 'normal' },
       { id: 'pinky',  x: 9, y: 9, dx: 0, dy: -1, color: '#ffb8ff', mode: 'normal' },
@@ -142,14 +131,14 @@ export default function App() {
   const initLevel = useCallback((lvl, currentScore = 0, currentLives = 3) => {
     gameData.current.maze = JSON.parse(JSON.stringify(LEVEL_1_MAZE));
     resetPositions();
-
+    
     let count = 0;
     gameData.current.maze.forEach(row => row.forEach(cell => {
       if (cell === 2 || cell === 3) count++;
     }));
     gameData.current.pelletsCount = count;
     gameData.current.fruitActive = false;
-
+    
     setLevel(lvl);
     setScore(currentScore);
     setLives(currentLives);
@@ -161,32 +150,6 @@ export default function App() {
     setGameState('PLAYING');
   };
 
-  const handleTouchStart = useCallback((e) => {
-    if (gameState !== 'PLAYING') return;
-    const touch = e.changedTouches?.[0];
-    if (!touch) return;
-    touchStartRef.current = { x: touch.clientX, y: touch.clientY };
-  }, [gameState]);
-
-  const handleTouchEnd = useCallback((e) => {
-    if (gameState !== 'PLAYING' || !touchStartRef.current) return;
-    const touch = e.changedTouches?.[0];
-    if (!touch) return;
-
-    const start = touchStartRef.current;
-    touchStartRef.current = null;
-    const dx = touch.clientX - start.x;
-    const dy = touch.clientY - start.y;
-    const distance = Math.hypot(dx, dy);
-    if (distance < 18) return;
-
-    if (Math.abs(dx) > Math.abs(dy)) {
-      setDirection(dx > 0 ? 1 : -1, 0);
-    } else {
-      setDirection(0, dy > 0 ? 1 : -1);
-    }
-  }, [gameState, setDirection]);
-
   useEffect(() => {
     if (score > highScore) {
       setHighScore(score);
@@ -197,8 +160,8 @@ export default function App() {
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (gameState !== 'PLAYING') return;
-      if (["Space","ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].indexOf(e.code) > -1) e.preventDefault();
-
+      if(["Space","ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].indexOf(e.code) > -1) e.preventDefault();
+      
       if (e.key === 'ArrowUp') setDirection(0, -1);
       if (e.key === 'ArrowDown') setDirection(0, 1);
       if (e.key === 'ArrowLeft') setDirection(-1, 0);
@@ -208,35 +171,74 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [gameState, setDirection]);
 
+  // Mobile/tablet control: swipe anywhere on the game board. No on-screen D-pad/buttons.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || gameState !== 'PLAYING') return;
+
+    const SWIPE_THRESHOLD = 18;
+    const handlePointerDown = (e) => {
+      if (e.pointerType === 'mouse') return;
+      touchStartRef.current = { x: e.clientX, y: e.clientY };
+      canvas.setPointerCapture?.(e.pointerId);
+    };
+
+    const handlePointerUp = (e) => {
+      const start = touchStartRef.current;
+      touchStartRef.current = null;
+      if (!start || e.pointerType === 'mouse') return;
+
+      const dx = e.clientX - start.x;
+      const dy = e.clientY - start.y;
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < SWIPE_THRESHOLD) return;
+
+      if (Math.abs(dx) > Math.abs(dy)) {
+        setDirection(dx > 0 ? 1 : -1, 0);
+      } else {
+        setDirection(0, dy > 0 ? 1 : -1);
+      }
+    };
+
+    const handlePointerCancel = () => {
+      touchStartRef.current = null;
+    };
+
+    canvas.addEventListener('pointerdown', handlePointerDown, { passive: true });
+    canvas.addEventListener('pointerup', handlePointerUp, { passive: true });
+    canvas.addEventListener('pointercancel', handlePointerCancel, { passive: true });
+    return () => {
+      canvas.removeEventListener('pointerdown', handlePointerDown);
+      canvas.removeEventListener('pointerup', handlePointerUp);
+      canvas.removeEventListener('pointercancel', handlePointerCancel);
+    };
+  }, [gameState, setDirection]);
+
   useEffect(() => {
     if (gameState !== 'PLAYING' && gameState !== 'DIED') return;
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
-
+    
     const isWall = (x, y, isGhost = false) => {
       const cx = Math.round(x);
       const cy = Math.round(y);
-      if (cy === 9 && (cx < 0 || cx >= MAZE_WIDTH)) return false;
+      if (cy === 9 && (cx < 0 || cx >= MAZE_WIDTH)) return false; 
       const cell = gameData.current.maze[cy]?.[cx];
       if (cell === undefined || cell === 1) return true;
-      if (cell === 4 && !isGhost) return true;
+      if (cell === 4 && !isGhost) return true; 
       return false;
     };
 
     const update = () => {
-      if (gameState === 'DIED') return;
-
+      if (gameState === 'DIED') return; 
+      
       const data = gameData.current;
       const p = data.pacman;
-      const currentLevel = levelRef.current;
-      const currentLives = livesRef.current;
-      const currentScore = scoreRef.current;
 
       if (Math.abs(p.x - Math.round(p.x)) <= p.speed/2 && Math.abs(p.y - Math.round(p.y)) <= p.speed/2) {
-        p.x = Math.round(p.x);
+        p.x = Math.round(p.x); 
         p.y = Math.round(p.y);
-
+        
         if (p.nextDx !== 0 || p.nextDy !== 0) {
           if (!isWall(p.x + p.nextDx, p.y + p.nextDy)) {
             p.dx = p.nextDx; p.dy = p.nextDy;
@@ -258,11 +260,11 @@ export default function App() {
         const val = data.maze[cy][cx];
         data.maze[cy][cx] = 0;
         data.pelletsCount--;
-
+        
         if (val === 3) {
           playSound('power');
           setScore(s => s + 50);
-          data.frightenedTimer = Math.max(0, 600 - (currentLevel * 30));
+          data.frightenedTimer = Math.max(0, 600 - (level * 30)); 
           data.ghostMultiplier = 200;
           data.ghosts.forEach(g => {
             if (g.mode === 'normal') {
@@ -281,14 +283,14 @@ export default function App() {
         }
 
         if (data.pelletsCount <= 0) {
-          initLevel(currentLevel + 1, currentScore, currentLives);
+          initLevel(level + 1, score, lives);
         }
       }
 
       if (data.fruitActive) {
         data.fruitTimer--;
-        if (getDist(p.x, p.y, 9, 11) < 1.2) {
-          setScore(s => s + (currentLevel * 100));
+        if (getDist(p.x, p.y, 9, 11) < 1.2) { 
+          setScore(s => s + (level * 100));
           playSound('power');
           data.fruitActive = false;
         }
@@ -303,16 +305,14 @@ export default function App() {
       }
 
       data.ghosts.forEach(g => {
-        let activeSpeed = g.mode === 'frightened'
-          ? GHOST_FRIGHTENED_SPEED
-          : (g.mode === 'eaten' ? GHOST_EATEN_SPEED : GHOST_NORMAL_SPEED + (currentLevel * 0.006));
-
+        let activeSpeed = g.mode === 'frightened' ? 0.05 : (g.mode === 'eaten' ? 0.2 : 0.0625 + (level * 0.005));
+        
         if (Math.round(g.y) === 9 && (g.x <= 3 || g.x >= 15)) activeSpeed *= 0.4;
 
         if (Math.abs(g.x - Math.round(g.x)) <= activeSpeed/2 && Math.abs(g.y - Math.round(g.y)) <= activeSpeed/2) {
           g.x = Math.round(g.x); g.y = Math.round(g.y);
-
-          let targetX = 9, targetY = 9;
+          
+          let targetX = 9, targetY = 9; 
 
           if (g.mode === 'eaten') {
             targetX = GHOST_PEN.x; targetY = GHOST_PEN.y;
@@ -331,7 +331,7 @@ export default function App() {
               if (getDist(g.x, g.y, p.x, p.y) > 8) {
                 targetX = p.x; targetY = p.y;
               } else {
-                targetX = 0; targetY = 19;
+                targetX = 0; targetY = 19; 
               }
             }
           }
@@ -340,17 +340,17 @@ export default function App() {
             {dx: 0, dy: -1}, {dx: 0, dy: 1}, {dx: -1, dy: 0}, {dx: 1, dy: 0}
           ].filter(m => {
             if (m.dx === -g.dx && m.dy === -g.dy && (g.dx !== 0 || g.dy !== 0)) return false;
-
+            
             const mcx = Math.round(g.x + m.dx);
             const mcy = Math.round(g.y + m.dy);
             if (mcy === 9 && (mcx < 0 || mcx >= MAZE_WIDTH)) return true;
-
+            
             const cell = data.maze[mcy]?.[mcx];
             if (cell === undefined || cell === 1) return false;
-
+            
             const inPen = Math.round(g.x) >= 8 && Math.round(g.x) <= 10 && Math.round(g.y) >= 8 && Math.round(g.y) <= 10;
-            if (cell === 4 && g.mode !== 'eaten' && !inPen) return false;
-
+            if (cell === 4 && g.mode !== 'eaten' && !inPen) return false; 
+            
             return true;
           });
 
@@ -372,7 +372,7 @@ export default function App() {
           } else {
             g.dx *= -1;
             g.dy *= -1;
-            if (g.dx === 0 && g.dy === 0) g.dx = 1;
+            if (g.dx === 0 && g.dy === 0) g.dx = 1; 
           }
         }
 
@@ -392,7 +392,7 @@ export default function App() {
             playSound('die');
             setGameState('DIED');
             setTimeout(() => {
-              if (livesRef.current > 1) {
+              if (lives > 1) {
                 setLives(l => l - 1);
                 resetPositions();
                 setGameState('PLAYING');
@@ -413,6 +413,7 @@ export default function App() {
       const data = gameData.current;
 
       if (g.mode === 'eaten') {
+        // Preserve the original eaten state: only the eyes remain visible while returning to the pen.
         ctx.fillStyle = '#ffffff';
         ctx.beginPath();
         ctx.arc(gx - TILE_SIZE/6, gy - TILE_SIZE/6, TILE_SIZE/6, 0, Math.PI * 2);
@@ -433,20 +434,31 @@ export default function App() {
       const renderScale = GHOST_RENDER_HEIGHT / image.naturalHeight;
       const renderWidth = image.naturalWidth * renderScale;
       const renderHeight = image.naturalHeight * renderScale;
+      const ghostColor = g.color;
 
       ctx.save();
       ctx.imageSmoothingEnabled = false;
-      // Brighten all imported art enough to survive the neon-on-black environment.
-      ctx.shadowColor = g.mode === 'frightened' ? '#1e6cff' : g.color;
+
+      // Give the darker character art a visible neon aura without changing gameplay sprites.
+      const glow = ctx.createRadialGradient(gx, gy, 3, gx, gy, Math.max(renderWidth, renderHeight) * 0.8);
+      glow.addColorStop(0, `${ghostColor}55`);
+      glow.addColorStop(0.45, `${ghostColor}22`);
+      glow.addColorStop(1, `${ghostColor}00`);
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(gx, gy, Math.max(renderWidth, renderHeight) * 0.8, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.shadowColor = g.mode === 'frightened' ? '#ffffff' : ghostColor;
       ctx.shadowBlur = 14;
-      ctx.globalAlpha = 1;
       if (g.mode === 'frightened') {
         const flashing = data.frightenedTimer < 150 && Math.floor(data.frightenedTimer / 15) % 2 === 0;
         ctx.filter = flashing
-          ? 'grayscale(1) brightness(2.2) contrast(1.25)'
-          : 'grayscale(1) sepia(1) hue-rotate(170deg) saturate(6) brightness(1.15) contrast(1.15)';
+          ? 'grayscale(1) brightness(1.9) contrast(1.15)'
+          : 'grayscale(1) sepia(1) hue-rotate(170deg) saturate(6) brightness(1.15) contrast(1.08)';
       } else {
-        ctx.filter = 'brightness(1.18) contrast(1.18)';
+        // Lift the darkest pixels enough to remain readable against the black maze.
+        ctx.filter = 'brightness(1.22) contrast(1.12)';
       }
       ctx.drawImage(image, gx - renderWidth / 2, gy - renderHeight / 2, renderWidth, renderHeight);
       ctx.restore();
@@ -455,20 +467,20 @@ export default function App() {
     const draw = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       const data = gameData.current;
-      const wallColor = MAZE_COLORS[(levelRef.current - 1) % MAZE_COLORS.length];
+      const wallColor = MAZE_COLORS[(level - 1) % MAZE_COLORS.length];
 
       data.maze.forEach((row, y) => {
         row.forEach((cell, x) => {
-          if (levelRef.current >= 20 && x > 9) {
+          if (level >= 20 && x > 9) {
             ctx.fillStyle = ['#ff00ff', '#00ffff', '#ffff00', '#ff0000'][Math.floor(Math.random()*4)];
             if(Math.random() > 0.5) ctx.fillText(String.fromCharCode(Math.random() * 50 + 65), x * TILE_SIZE, y * TILE_SIZE + 15);
-            return;
+            return; 
           }
 
           if (cell === 1) {
-            ctx.strokeStyle = wallColor;
+            ctx.strokeStyle = wallColor; 
             ctx.lineWidth = 2;
-            ctx.shadowColor = wallColor;
+            ctx.shadowColor = wallColor; 
             ctx.shadowBlur = 8;
             ctx.strokeRect(x * TILE_SIZE + 3, y * TILE_SIZE + 3, TILE_SIZE - 6, TILE_SIZE - 6);
             ctx.shadowBlur = 0;
@@ -481,12 +493,12 @@ export default function App() {
           } else if (cell === 3) {
             const pulse = 6 + Math.sin(Date.now() / 150) * 2;
             ctx.fillStyle = '#ff00ff';
-            ctx.shadowColor = '#ff00ff';
+            ctx.shadowColor = '#ff00ff'; 
             ctx.shadowBlur = 15;
             ctx.beginPath(); ctx.arc(x * TILE_SIZE + TILE_SIZE/2, y * TILE_SIZE + TILE_SIZE/2, pulse, 0, Math.PI * 2); ctx.fill();
             ctx.shadowBlur = 0;
           } else if (cell === 4) {
-            ctx.fillStyle = '#ffb8ff';
+            ctx.fillStyle = '#ffb8ff'; 
             ctx.shadowColor = '#ffb8ff';
             ctx.shadowBlur = 8;
             ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE + 10, TILE_SIZE, 4);
@@ -495,11 +507,11 @@ export default function App() {
         });
       });
 
-      if (data.fruitActive && levelRef.current < 20) {
+      if (data.fruitActive && level < 20) {
         ctx.font = '18px Arial';
         ctx.shadowColor = '#ffffff';
         ctx.shadowBlur = 10;
-        const fruitIcon = FRUITS[Math.min(levelRef.current - 1, FRUITS.length - 1)];
+        const fruitIcon = FRUITS[Math.min(level - 1, FRUITS.length - 1)];
         ctx.fillText(fruitIcon, 9 * TILE_SIZE + 2, 11 * TILE_SIZE + 18);
         ctx.shadowBlur = 0;
       }
@@ -515,11 +527,11 @@ export default function App() {
         else if (p.dx === -1) angle = Math.PI;
         else if (p.dy === 1) angle = Math.PI / 2;
         else if (p.dy === -1) angle = -Math.PI / 2;
-
+        
         const mouthOpen = gameState === 'DIED' ? Math.PI/1.2 : Math.abs(Math.sin(p.frame)) * 0.5;
         const px = p.x * TILE_SIZE + TILE_SIZE/2;
         const py = p.y * TILE_SIZE + TILE_SIZE/2;
-
+        
         ctx.arc(px, py, TILE_SIZE/2.2, angle + mouthOpen, angle + 2*Math.PI - mouthOpen);
         ctx.lineTo(px, py);
         ctx.fill();
@@ -536,10 +548,10 @@ export default function App() {
         gameData.current.animationId = requestAnimationFrame(loop);
       }
     };
-
+    
     loop();
     return () => cancelAnimationFrame(gameData.current.animationId);
-  }, [gameState, initLevel, resetPositions]);
+  }, [gameState, level, lives, score, initLevel, resetPositions]);
 
   return (
     <div className="game-container">
@@ -559,15 +571,12 @@ export default function App() {
       </div>
 
       <div className="canvas-wrapper">
-        <canvas
-          ref={canvasRef}
-          width={MAZE_WIDTH * TILE_SIZE}
-          height={LEVEL_1_MAZE.length * TILE_SIZE}
-          onTouchStart={handleTouchStart}
-          onTouchEnd={handleTouchEnd}
-          onTouchCancel={() => { touchStartRef.current = null; }}
+        <canvas 
+          ref={canvasRef} 
+          width={MAZE_WIDTH * TILE_SIZE} 
+          height={LEVEL_1_MAZE.length * TILE_SIZE} 
         />
-
+        
         {gameState === 'START' && (
           <div className="overlay">
             <div className="landing-art">
