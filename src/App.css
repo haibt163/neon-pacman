@@ -4,8 +4,18 @@
   --bg-color: #050505;
 }
 
-body {
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
   margin: 0;
+  min-height: 100%;
+}
+
+body {
   padding: 0;
   background-color: var(--bg-color);
   /* Synthwave Grid Background */
@@ -20,7 +30,9 @@ body {
   justify-content: center;
   align-items: center;
   min-height: 100vh;
+  min-height: 100dvh;
   overflow: hidden;
+  overscroll-behavior: none;
 }
 
 .game-container {
@@ -29,6 +41,8 @@ body {
   align-items: center;
   gap: 20px;
   z-index: 10;
+  width: min(100%, 640px);
+  padding: 12px;
 }
 
 .header {
@@ -38,6 +52,7 @@ body {
   max-width: 600px;
   text-shadow: 0 0 10px var(--neon-blue);
   font-size: 14px;
+  gap: 12px;
 }
 
 .stat-box {
@@ -45,6 +60,8 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+  text-align: center;
 }
 
 .stat-value {
@@ -54,18 +71,28 @@ body {
 
 .canvas-wrapper {
   position: relative;
+  width: min(100%, 456px);
   /* An ambient background glow that doesn't create hard physical borders */
   box-shadow: 0 0 40px rgba(0, 255, 255, 0.2), 0 0 40px rgba(255, 0, 255, 0.2);
   border-radius: 4px;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 canvas {
   background-color: rgba(0, 0, 0, 0.6);
   display: block;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
   /* Top and Bottom borders only! This leaves the side tunnels open */
   border-top: 3px solid var(--neon-blue);
   border-bottom: 3px solid var(--neon-pink);
   border-radius: 4px;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  image-rendering: pixelated;
 }
 
 .overlay {
@@ -78,6 +105,7 @@ canvas {
   align-items: center;
   text-align: center;
   z-index: 20;
+  touch-action: manipulation;
 }
 
 .overlay h1 {
@@ -105,8 +133,8 @@ canvas {
 
 /* The title-screen enemies now use the same real transparent PNG sprites as gameplay. */
 .css-ghost {
-  width: 30px;
-  height: 35px;
+  width: 38px;
+  height: 48px;
   position: relative;
   background-color: transparent;
   background-repeat: no-repeat;
@@ -119,10 +147,10 @@ canvas {
   display: none;
 }
 
-.blinky { background-image: url('./assets/blinky.png'); filter: drop-shadow(0 0 10px #ff00ff); }
-.pinky { background-image: url('./assets/pinky.png'); filter: drop-shadow(0 0 10px #ff00ff); }
-.inky { background-image: url('./assets/inky.png'); filter: drop-shadow(0 0 10px #00ffff); }
-.clyde { background-image: url('./assets/clyde.png'); filter: drop-shadow(0 0 10px #aa00ff); }
+.blinky { background-image: url('./assets/blinky.png'); filter: drop-shadow(0 0 10px #ff00ff) brightness(1.2); }
+.pinky { background-image: url('./assets/pinky.png'); filter: drop-shadow(0 0 10px #ff00ff) brightness(1.2); }
+.inky { background-image: url('./assets/inky.png'); filter: drop-shadow(0 0 10px #00ffff) brightness(1.25); }
+.clyde { background-image: url('./assets/clyde.png'); filter: drop-shadow(0 0 10px #aa00ff) brightness(1.35); }
 
 @keyframes chomp {
   0% { border-right-color: transparent; }
@@ -141,6 +169,7 @@ button {
   box-shadow: 0 0 10px var(--neon-blue) inset, 0 0 10px var(--neon-blue);
   text-shadow: 0 0 5px var(--neon-blue);
   transition: all 0.2s;
+  touch-action: manipulation;
 }
 
 button:hover {
@@ -148,4 +177,49 @@ button:hover {
   color: #000;
   box-shadow: 0 0 20px var(--neon-blue) inset, 0 0 20px var(--neon-blue);
   text-shadow: none;
+}
+
+@media (max-width: 600px) {
+  .game-container {
+    gap: 10px;
+    padding: 8px;
+  }
+
+  .header {
+    gap: 6px;
+    font-size: clamp(8px, 2.6vw, 12px);
+  }
+
+  .stat-box {
+    gap: 5px;
+  }
+
+  .canvas-wrapper {
+    width: min(100%, 456px);
+  }
+
+  .overlay h1 {
+    font-size: clamp(20px, 7vw, 30px);
+  }
+
+  .landing-art {
+    gap: 7px;
+    margin-bottom: 22px;
+    transform: scale(0.85);
+  }
+}
+
+@media (max-height: 700px) and (orientation: landscape) {
+  .game-container {
+    gap: 6px;
+    padding: 6px;
+  }
+
+  .header {
+    font-size: 9px;
+  }
+
+  .canvas-wrapper {
+    width: min(70vh, 456px);
+  }
 }
